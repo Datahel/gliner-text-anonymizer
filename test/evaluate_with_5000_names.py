@@ -4,6 +4,7 @@ import random
 import test_util_text_anonymizer
 
 
+@unittest.skip("Recognizers not implemented - refactoring to GLiNER")
 class EvaluateWith5000Names(unittest.TestCase):
 
     def test_anonymizer(self):

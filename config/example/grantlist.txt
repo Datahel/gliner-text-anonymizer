@@ -1,0 +1,9 @@
+# Grantlist (allowlist) - words to protect from anonymization when using "example" profile
+# One word per line, case-insensitive matching
+# Lines starting with # are comments
+
+# Common Finnish words that should not be anonymized
+helsinki
+suomi
+esimerkki123
+

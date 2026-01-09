@@ -1,1 +1,0 @@
-FINETUNED_MODEL_VERSION = "fi_datahel_spacy-0.0.3"

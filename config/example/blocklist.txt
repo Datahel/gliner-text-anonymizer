@@ -1,0 +1,8 @@
+# Blocklist - words to always anonymize when using "example" profile
+# One word per line, case-insensitive matching
+# Lines starting with # are comments
+
+# Fictional identifiers for testing
+salakoodi123
+tunniste456
+

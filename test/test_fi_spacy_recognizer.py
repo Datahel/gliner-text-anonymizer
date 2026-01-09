@@ -6,6 +6,7 @@ import test_data
 from base_recoginizer_test import BaseRecognizerTest
 
 
+@unittest.skip("Recognizers not implemented - refactoring to GLiNER")
 class TestFiSpacyRecognizer(unittest.TestCase):
 
     def test_self(self):

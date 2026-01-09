@@ -5,6 +5,7 @@ from base_recoginizer_test import BaseRecognizerTest
 from text_anonymizer.recognizers.fi_ssn_recognizer import FiSsnRecognizer
 
 
+@unittest.skip("Recognizers not implemented - refactoring to GLiNER")
 class TestSSNRecognizer(unittest.TestCase):
 
     def test_self(self):

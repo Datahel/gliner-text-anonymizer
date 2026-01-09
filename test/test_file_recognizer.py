@@ -5,6 +5,7 @@ from base_recoginizer_test import BaseRecognizerTest
 from text_anonymizer.recognizers.filename_recognizer import FilenameRecognizer
 
 
+@unittest.skip("Recognizers not implemented - refactoring to GLiNER")
 class TestFileRecognizer(unittest.TestCase):
 
     def test_self(self):

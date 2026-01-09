@@ -1,7 +1,7 @@
-from presidio_anonymizer.entities import OperatorConfig
-
+# from presidio_anonymizer.entities import OperatorConfig
+from text_anonymizer.anonymizer_settings import AnonymizerSettings
 from text_anonymizer.constants import *
-from text_anonymizer.models.anonymizer_settings import AnonymizerSettings
+# from text_anonymizer.models.anonymizer_settings import AnonymizerSettings
 
 DEFAULT_SETTINGS = AnonymizerSettings()
 DEFAULT_SETTINGS.score_threshold = 0.5
@@ -38,10 +38,10 @@ DEFAULT_SETTINGS.mask_mappings_debug = {
     'REAL_PROPERTY_ID': 'KIINTEISTÖTUNNUS',
     'PERSON': 'NIMI',
 }
-# The GRANTLISTED operator is configured to be not masked (chars_to_mask=0)
-DEFAULT_SETTINGS.operator_config = {
-    "GRANTLISTED": OperatorConfig("mask", {'chars_to_mask': 0, 'masking_char': '*', 'from_end': False}),
-}
+# # The GRANTLISTED operator is configured to be not masked (chars_to_mask=0)
+# DEFAULT_SETTINGS.operator_config = {
+#     "GRANTLISTED": OperatorConfig("mask", {'chars_to_mask': 0, 'masking_char': '*', 'from_end': False}),
+# }
 
 DEFAULT_SETTINGS.recognizer_configuration = [RECOGNIZER_EMAIL,
                                              RECOGNIZER_PHONE,

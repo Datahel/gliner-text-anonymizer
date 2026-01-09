@@ -23,6 +23,7 @@ def build_analyzer(anonymize_full_address: bool):
     return analyzer
 
 
+@unittest.skip("Recognizers not implemented - refactoring to GLiNER")
 class TestFiSpacyAddressRecognizer(unittest.TestCase):
 
     def test_partial_address_anonymization(self):

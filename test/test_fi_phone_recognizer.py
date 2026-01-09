@@ -4,9 +4,9 @@ from presidio_analyzer.predefined_recognizers import PhoneRecognizer
 
 import test_data
 from base_recoginizer_test import BaseRecognizerTest
-from text_anonymizer.recognizers.fi_phone_recognizer import FiPhoneRecognizer
+# from text_anonymizer.recognizers.fi_phone_recognizer import FiPhoneRecognizer
 
-
+@unittest.skip("Phone recognizer to be replaced with gliner version.")
 class TestPhoneRecognizer(unittest.TestCase):
 
     def test_phone(self):

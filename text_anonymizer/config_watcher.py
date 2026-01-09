@@ -1,57 +1,31 @@
-import logging
-from typing import Callable, Optional
-
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-
-from text_anonymizer.config_cache import ConfigCache
-
-logger = logging.getLogger(__name__)
-
-
-class ConfigReloadHandler(FileSystemEventHandler):
-    """Watch config directory and invalidate cache on file changes."""
-
-    def __init__(self, on_change_callback: Optional[Callable[[], None]] = None):
-        super().__init__()
-        self._on_change_callback = on_change_callback
-
-    def on_modified(self, event):
-        if event.is_directory:
-            return
-        logger.debug("Config file changed: %s", event.src_path)
-        ConfigCache.instance().notify_path_changed(event.src_path)
-        if self._on_change_callback:
-            self._on_change_callback()
+"""
+Stub config watcher - not implemented for lightweight version.
+Kept for API compatibility only.
+"""
+from typing import Optional, Callable
 
 
 class ConfigWatcher:
-    """Filesystem watcher for config directory changes."""
+    """Stub watcher - does nothing in lightweight implementation."""
 
-    def __init__(
-        self,
-        config_dir: str,
-        enabled: bool = True,
-        on_change_callback: Optional[Callable[[], None]] = None
-    ):
+    def __init__(self,
+                 config_dir: str,
+                 enabled: bool = True,
+                 on_change_callback: Optional[Callable] = None):
+        """Initialize stub watcher (no-op)."""
         self.config_dir = config_dir
-        self.enabled = enabled
-        self.observer: Optional[Observer] = None
-        self._on_change_callback = on_change_callback
+        self.enabled = False  # Always disabled
+        self.on_change_callback = on_change_callback
 
-    def start(self) -> None:
-        if not self.enabled:
-            logger.info("ConfigWatcher is disabled")
-            return
-        event_handler = ConfigReloadHandler(on_change_callback=self._on_change_callback)
-        self.observer = Observer()
-        self.observer.schedule(event_handler, self.config_dir, recursive=True)
-        self.observer.start()
-        logger.info("ConfigWatcher started for %s (recursive)", self.config_dir)
+    def start(self):
+        """No-op start."""
+        pass
 
-    def stop(self) -> None:
-        if self.observer:
-            self.observer.stop()
-            self.observer.join()
-            logger.info("ConfigWatcher stopped")
+    def stop(self):
+        """No-op stop."""
+        pass
+
+    def is_running(self) -> bool:
+        """Always returns False."""
+        return False
 
