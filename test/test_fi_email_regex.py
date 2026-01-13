@@ -1,19 +1,18 @@
 import unittest
 
-from presidio_analyzer.predefined_recognizers import EmailRecognizer
-
 import test_data
 from base_recoginizer_test import BaseRecognizerTest
 
 
-@unittest.skip("Recognizers not implemented - refactoring to GLiNER")
-class TestEmailRecognizer(unittest.TestCase):
-
+class TestEmailRegex(unittest.TestCase):
+    '''
+    Refactored regex test case.
+    '''
     def test_self(self):
-        recognizer_fi = EmailRecognizer(supported_language='fi')
+
         test_cases = test_data.test_email
         bad_cases = test_data.bad_email
-        test_base = BaseRecognizerTest(recognizer_fi, test_cases, bad_cases)
+        test_base = BaseRecognizerTest('email_regex', test_cases, bad_cases)
         self.assertTrue(test_base.test_recognizer(), 'Recognizer self test failed.')
 
 

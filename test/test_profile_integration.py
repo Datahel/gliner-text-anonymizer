@@ -62,7 +62,7 @@ class TestProfileRegexPatterns(unittest.TestCase):
         logger.info(f"Loaded regex patterns for profile 'example': {list(regex_patterns.keys())}")
 
     def test_example_pattern_detection(self):
-        """Test that EXAMPLE entity patterns are detected."""
+        """Test that VARCODE entity patterns are detected."""
         test_cases = [
             ("ABCxyz123", "Simple pattern without context"),
             ("Please process ABCxyz123 immediately.", "Pattern in context"),

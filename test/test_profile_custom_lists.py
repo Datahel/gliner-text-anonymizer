@@ -159,7 +159,7 @@ class TestProfileGrantlist(unittest.TestCase):
         """Test that grantlist matching is case-insensitive."""
         test_cases = [
             "example321",
-            "EXAMPLE321",
+            "VARCODE321",
             "Example321",
             "eXaMpLe321",
         ]
@@ -201,12 +201,12 @@ class TestProfileCustomListsIntegration(unittest.TestCase):
 
     def test_blocklist_and_regex_patterns_together(self):
         """Test that blocklist works alongside regex patterns in a profile."""
-        # The example profile has both regex patterns (EXAMPLE entity) and blocklist
-        text = "Code EXAMPLE123 and item blockword123 are both here."
+        # The example profile has both regex patterns (VARCODE entity) and blocklist
+        text = "Code VARCODE123 and item blockword123 are both here."
         result = self.anonymizer.anonymize(text, profile="example")
 
         # Should detect both regex pattern and blocklist
-        # EXAMPLE from regex patterns
+        # VARCODE from regex patterns
         # OTHER from blocklist
         self.assertGreater(len(result.details), 0)
         logger.info(f"Combined blocklist and regex detection: {result.details}")

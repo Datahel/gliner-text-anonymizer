@@ -394,15 +394,15 @@ class TestAnonymizerAPI(unittest.TestCase):
         """Test custom regex patterns from example profile's regex_patterns.json."""
         # Test various patterns defined in config/example/regex_patterns.json
         test_cases = [
-            ("TEST_EXAMPLE1", "prefix_variations"),
-            ("PROD_EXAMPLE99", "prefix_variations"),
-            ("DEV_EXAMPLE123", "prefix_variations"),
-            ("EXAMPLEabc", "alphanumeric_suffix"),
-            ("EXAMPLE1a2b", "alphanumeric_suffix"),
-            ("EXAMPLE123", "word_with_numbers"),
-            ("EXAMPLE999999", "word_with_numbers"),
-            ("EXAMPLE12", "word_with_digit_range"),
-            ("EXAMPLE1234", "word_with_digit_range"),
+            ("TEST_VARCODE1", "prefix_variations"),
+            ("PROD_VARCODE99", "prefix_variations"),
+            ("DEV_VARCODE123", "prefix_variations"),
+            ("VARCODEabc", "alphanumeric_suffix"),
+            ("VARCODE1a2b", "alphanumeric_suffix"),
+            ("VARCODE123", "word_with_numbers"),
+            ("VARCODE999999", "word_with_numbers"),
+            ("VARCODE12", "word_with_digit_range"),
+            ("VARCODE1234", "word_with_digit_range"),
         ]
 
         for test_word, pattern_name in test_cases:
@@ -417,26 +417,26 @@ class TestAnonymizerAPI(unittest.TestCase):
 
             data = response.json()
 
-            # The EXAMPLE pattern should be anonymized
+            # The VARCODE pattern should be anonymized
             self.assertNotIn(test_word, data["anonymized_txt"],
                            f"{test_word} should be anonymized by pattern '{pattern_name}'")
 
-            # Check statistics for EXAMPLE entity
+            # Check statistics for VARCODE entity
             statistics = data.get("statistics", {})
-            self.assertIn("EXAMPLE", statistics,
-                         f"EXAMPLE entity should be detected for '{test_word}' (pattern: {pattern_name})")
-            self.assertGreater(statistics["EXAMPLE"], 0,
-                              f"EXAMPLE count should be > 0 for '{test_word}'")
+            self.assertIn("VARCODE", statistics,
+                         f"VARCODE entity should be detected for '{test_word}' (pattern: {pattern_name})")
+            self.assertGreater(statistics["VARCODE"], 0,
+                              f"VARCODE count should be > 0 for '{test_word}'")
 
         logger.info("Custom regex patterns tested successfully: %d patterns verified", len(test_cases))
 
     def test_anonymize_with_profile_regex_patterns_no_match(self):
         """Test that words not matching regex patterns are preserved."""
-        # These should NOT match any EXAMPLE patterns
+        # These should NOT match any VARCODE patterns
         non_matching_words = [
-            "EXAMPLES",  # Has 'S' at end, word boundary prevents match
-            "MYEXAMPLE",  # Prefix prevents word boundary match
-            "EXAMPLEABC1234567",  # Too many digits for alphanumeric patterns
+            "VARCODES",  # Has 'S' at end, word boundary prevents match
+            "MYVARCODE",  # Prefix prevents word boundary match
+            "VARCODEABC1234567",  # Too many digits for alphanumeric patterns
             "example123test",  # Has suffix after numbers
             "EX",  # Too short
         ]
@@ -453,9 +453,9 @@ class TestAnonymizerAPI(unittest.TestCase):
 
             data = response.json()
 
-            # Word should remain (not matched by EXAMPLE patterns)
+            # Word should remain (not matched by VARCODE patterns)
             self.assertIn(word, data["anonymized_txt"],
-                         f"{word} should NOT be anonymized by EXAMPLE patterns")
+                         f"{word} should NOT be anonymized by VARCODE patterns")
 
         logger.info("Verified non-matching words preserved: %d words tested", len(non_matching_words))
 
@@ -463,8 +463,8 @@ class TestAnonymizerAPI(unittest.TestCase):
         """Test that custom regex patterns are NOT applied with nonexistent profile."""
         # These patterns would match with "example" profile, but not with nonexistent profile
         test_words = [
-            "TEST_EXAMPLE1",
-            "EXAMPLE123",
+            "TEST_VARCODE1",
+            "VARCODE123",
         ]
 
         for word in test_words:
@@ -483,10 +483,10 @@ class TestAnonymizerAPI(unittest.TestCase):
             self.assertIn(word, data["anonymized_txt"],
                          f"{word} should NOT be anonymized without valid profile")
 
-            # EXAMPLE entity should NOT be in statistics
+            # VARCODE entity should NOT be in statistics
             statistics = data.get("statistics", {})
-            self.assertNotIn("EXAMPLE", statistics,
-                           f"EXAMPLE entity should not be detected without valid profile for '{word}'")
+            self.assertNotIn("VARCODE", statistics,
+                           f"VARCODE entity should not be detected without valid profile for '{word}'")
 
         logger.info("Verified regex patterns not applied with nonexistent profile: %d words tested", len(test_words))
 

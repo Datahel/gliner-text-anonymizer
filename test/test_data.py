@@ -1,3 +1,4 @@
+# Central place for different types test strings
 # These sentences and strings are used for testing recognizers. Use only generated texts, not real addresses etc.
 
 test_phonenumbers = ['040-0001119', '09 310 11111', '09 31011111', '0931011111',

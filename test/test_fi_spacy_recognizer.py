@@ -1,20 +1,24 @@
 import unittest
 
-from presidio_analyzer.predefined_recognizers import SpacyRecognizer
-
 import test_data
 from base_recoginizer_test import BaseRecognizerTest
 
-
-@unittest.skip("Recognizers not implemented - refactoring to GLiNER")
+# TODO: THIS SHOULD BE TEST PERSON NER FI
 class TestFiSpacyRecognizer(unittest.TestCase):
+    """
+    Test Finnish Person Name NER recognizer using GLiNER.
+    Tests detection and anonymization of Finnish person names:
+    - Simple names: Maija Mehiläinen, Silja Laine
+    - Complex names: Marja Mustikkamäki, Mary Johnson-Smith
+    - Single names: Virtanen, Keijo
+    """
 
-    def test_self(self):
-        finnish_spacy_recognizer = SpacyRecognizer(ner_strength=0.50,
-                                                   supported_language='fi')
-        test_cases_fi = test_data.test_names_fi
-        test_base = BaseRecognizerTest(finnish_spacy_recognizer, test_cases_fi)
-        self.assertTrue(test_base.test_recognizer(), 'Recognizer self test failed.')
+    def test_person_ner(self):
+        """Test person name NER recognition."""
+        test_cases = test_data.test_names_fi
+        test_base = BaseRecognizerTest('person_ner', test_cases)
+        self.assertTrue(test_base.test_recognizer(), 'Person NER test failed.')
+
 
 if __name__ == '__main__':
     unittest.main()

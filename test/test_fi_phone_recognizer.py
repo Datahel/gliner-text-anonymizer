@@ -1,30 +1,24 @@
 import unittest
 
-from presidio_analyzer.predefined_recognizers import PhoneRecognizer
-
 import test_data
 from base_recoginizer_test import BaseRecognizerTest
-# from text_anonymizer.recognizers.fi_phone_recognizer import FiPhoneRecognizer
 
-@unittest.skip("Phone recognizer to be replaced with gliner version.")
+
 class TestPhoneRecognizer(unittest.TestCase):
+    """
+    Test Finnish phone number regex recognizer.
+    Tests detection and anonymization of Finnish phone numbers in various formats:
+    - Local format: 040-1234567, 09 123 4567
+    - International format: +358401234567
+    - Organization format: (09) 12345678
+    """
 
-    def test_phone(self):
-        recognizer_fi = PhoneRecognizer(context=PhoneRecognizer.CONTEXT,
-                                          supported_language='fi',
-                                          supported_regions=("FI", "UK", "DE", "SE"))
-        test_cases = test_data.test_phonenumbers
-        bad_cases = test_data.bad_phonenumbers
-        test_base = BaseRecognizerTest(recognizer_fi, test_cases, bad_cases)
-        self.assertTrue(test_base.test_recognizer(), 'Recognizer self test failed.')
-
-    def test_fi_phone(self):
-        recognizer_fi = FiPhoneRecognizer(context=PhoneRecognizer.CONTEXT,
-                                        supported_language='fi',)
+    def test_fi_puhelin_regex(self):
+        """Test Finnish phone number regex pattern."""
         test_cases = test_data.test_phonenumbers_fi
         bad_cases = test_data.bad_phonenumbers
-        test_base = BaseRecognizerTest(recognizer_fi, test_cases, bad_cases)
-        self.assertTrue(test_base.test_recognizer(), 'Recognizer self test failed.')
+        test_base = BaseRecognizerTest('fi_puhelin_regex', test_cases, bad_cases)
+        self.assertTrue(test_base.test_recognizer(), 'Finnish phone number regex test failed.')
 
 
 if __name__ == '__main__':
