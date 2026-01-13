@@ -44,3 +44,4 @@ TIEDOSTO: \b\w+\.(txt|doc|docx|xls|xlsx|pdf|jpg|jpeg|png|gif|ppt|pptx|zip|rar|cs
 # URL file paths
 TIEDOSTO: https?://[A-Za-z0-9%-_./]+\.(txt|doc|docx|xls|xlsx|pdf|jpg|jpeg|png|gif|ppt|pptx|zip|rar|csv)\b
 
+EMAIL: \b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b

@@ -12,3 +12,4 @@
 /train_custom_spacy_model/run_multi_seed_training.py
 /train_custom_spacy_model/debug_alignment.py
 /deprecated/
+/api_server.log

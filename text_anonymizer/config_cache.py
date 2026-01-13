@@ -63,6 +63,66 @@ class ConfigCache:
 
         return patterns
 
+    def get_gliner_labels(self, profile: str) -> Optional[List[str]]:
+        """
+        Get GLiNER labels for a profile.
+        Loads from gliner_labels.txt with one label per line.
+
+        Args:
+            profile: Profile name
+
+        Returns:
+            List of GLiNER labels or None if file doesn't exist
+        """
+        labels_file = os.path.join(self.config_dir, profile, 'gliner_labels.txt')
+
+        if not os.path.exists(labels_file):
+            return None
+
+        labels = []
+        try:
+            with open(labels_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if line and not line.startswith('#'):
+                        labels.append(line)
+
+            return labels if labels else None
+
+        except Exception as e:
+            print(f"Warning: Failed to load GLiNER labels from {labels_file}: {e}")
+            return None
+
+    def get_label_mappings(self) -> Dict[str, str]:
+        """
+        Get label mappings from config/label_mappings.txt.
+        Format: INPUT_LABEL=OUTPUT_LABEL
+
+        Returns:
+            Dictionary mapping input labels to output labels
+        """
+        mappings_file = os.path.join(self.config_dir, 'label_mappings.txt')
+        mappings = {}
+
+        if not os.path.exists(mappings_file):
+            return mappings
+
+        try:
+            with open(mappings_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        mappings[key.strip()] = value.strip()
+
+            return mappings
+
+        except Exception as e:
+            print(f"Warning: Failed to load label mappings from {mappings_file}: {e}")
+            return mappings
+
     def _load_text_list(self, filepath: str) -> Set[str]:
         """Load text list from file (one item per line)."""
         items = set()
@@ -76,4 +136,3 @@ class ConfigCache:
             except Exception as e:
                 print(f"Warning: Failed to load list from {filepath}: {e}")
         return items
-

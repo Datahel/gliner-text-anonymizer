@@ -34,10 +34,25 @@ class Anonymizer(AnonymizerInterface):
         self.debug_mode = debug_mode
         self.model = self._load_or_download_model()
 
-        # Default GLiNER labels for common entities
-        self.labels = ["person", "phone number", "email", "address", "organization"]
+        # Default labels: NER labels + all implemented regex labels
+        self.labels = [
+            # NER labels (GLiNER)
+            "person_ner",
+            "phone_number_ner",
+            "email_ner",
+            "address_ner",
+            # Regex labels (all implemented Finnish patterns)
+            "fi_hetu_regex",
+            "fi_puhelin_regex",
+            "fi_rekisteri_regex",
+            "fi_kiinteisto_regex",
+            "tiedosto_regex"
+        ]
         self._last_entities = []
         self.config_cache = ConfigCache()
+
+        # Load label mappings from config file
+        self.label_mappings = self.config_cache.get_label_mappings()
 
         super().__init__(languages, recognizer_configuration, **kwargs)
 
@@ -52,15 +67,38 @@ class Anonymizer(AnonymizerInterface):
                 print("Model not found in cache. Downloading GLiNER model...")
             return GLiNER.from_pretrained(self.model_name)
 
-    def _find_entities_with_gliner(self, text: str, threshold: float = 0.3) -> List[Dict]:
-        """Use GLiNER to find entities in text."""
-        return self.model.predict_entities(text, self.labels, threshold=threshold)
 
-    def _find_entities_with_regex(self, text: str, patterns: List[Dict[str, str]]) -> List[Dict]:
-        """Find entities using regex patterns from profile."""
+    def _find_entities_with_gliner(self, text: str, threshold: float = 0.3,
+                                   custom_labels: Optional[List[str]] = None) -> List[Dict]:
+        """
+        Use GLiNER to find entities in text.
+
+        Args:
+            text: Text to analyze
+            threshold: Confidence threshold (0.0-1.0)
+            custom_labels: Custom labels to use instead of default
+        """
+        labels = custom_labels if custom_labels is not None else self.labels
+        return self.model.predict_entities(text, labels, threshold=threshold)
+
+    def _find_entities_with_regex(self, text: str, patterns: List[Dict[str, str]],
+                                  allowed_types: Optional[Set[str]] = None) -> List[Dict]:
+        """
+        Find entities using regex patterns from profile.
+
+        Args:
+            text: Text to search
+            patterns: List of pattern definitions
+            allowed_types: Set of allowed entity types (if None, all are allowed)
+        """
         entities = []
         for pattern_def in patterns:
             entity_type = pattern_def['entity_type']
+
+            # Skip if this entity type is not in the allowed list
+            if allowed_types is not None and entity_type not in allowed_types:
+                continue
+
             pattern = pattern_def['pattern']
 
             try:
@@ -138,27 +176,106 @@ class Anonymizer(AnonymizerInterface):
         return non_overlapping
 
     def _map_entity_label(self, label: str) -> str:
-        """Map GLiNER labels to consistent output labels."""
-        label_map = {
-            'person': 'PERSON',
-            'phone number': 'PHONE_NUMBER',
-            'email': 'EMAIL',
-            'address': 'ADDRESS',
-            'organization': 'ORGANIZATION'
-        }
-        return label_map.get(label.lower(), label.upper())
+        """
+        Map entity labels to output labels using config/label_mappings.txt.
 
-    def anonymize_text(self, text: str, profile: Optional[str] = None) -> str:
-        """Anonymize text using GLiNER and optional profile configuration."""
+        Process:
+        1. Convert label to uppercase with underscores (e.g., 'phone number' -> 'PHONE_NUMBER')
+        2. Look up in label_mappings (e.g., 'PHONE_NUMBER' -> 'PUHELINNUMERO')
+        3. If not found in mappings, use the uppercase version
+
+        Args:
+            label: Input label (e.g., 'person', 'phone number', 'FI_HETU')
+
+        Returns:
+            Mapped output label (e.g., 'NIMI', 'PUHELINNUMERO', 'HETU')
+        """
+        # Convert label to uppercase with underscores (normalize)
+        normalized_label = label.upper().replace(' ', '_')
+
+        # Look up in mappings, fallback to normalized label if not found
+        return self.label_mappings.get(normalized_label, normalized_label)
+
+    def _separate_labels(self, labels: List[str]) -> tuple[List[str], Optional[Set[str]]]:
+        """
+        Separate NER labels from regex entity types based on suffix.
+
+        NER labels: end with '_ner' (e.g., 'person_ner', 'phone_number_ner')
+        Regex types: end with '_regex' (e.g., 'fi_hetu_regex', 'fi_puhelin_regex')
+
+        Args:
+            labels: List of labels with suffixes
+
+        Returns:
+            Tuple of (gliner_labels, regex_entity_types_set or None)
+        """
+        gliner_labels = []
+        regex_types = []
+
+        for label in labels:
+            if label.endswith('_ner'):
+                # Remove _ner suffix and convert underscores to spaces for GLiNER
+                # (e.g., 'person_ner' -> 'person', 'phone_number_ner' -> 'phone number')
+                ner_label = label[:-4].replace('_', ' ')
+                gliner_labels.append(ner_label)
+            elif label.endswith('_regex'):
+                # Remove _regex suffix and convert to uppercase entity type
+                # (e.g., 'fi_hetu_regex' -> 'FI_HETU')
+                entity_type = label[:-6].upper()
+                regex_types.append(entity_type)
+            else:
+                # For backward compatibility: treat unsuffixed labels as NER labels
+                # Also convert underscores to spaces (e.g., 'phone_number' -> 'phone number')
+                gliner_labels.append(label.replace('_', ' '))
+
+        # Return None for regex_types if empty (means don't use regex patterns)
+        return gliner_labels, set(regex_types) if regex_types else None
+
+    def anonymize_text(self, text: str, profile: str = 'default',
+                      labels: Optional[List[str]] = None,
+                      gliner_threshold: float = 0.3) -> str:
+        """
+        Anonymize text using GLiNER and optional profile configuration.
+
+        Args:
+            text: Text to anonymize
+            profile: Profile name for configuration
+            labels: List of entity labels to detect with suffixes:
+                   - '_ner' for NER/GLiNER labels (e.g., 'person_ner', 'email_ner')
+                   - '_regex' for regex patterns (e.g., 'fi_hetu_regex', 'fi_puhelin_regex')
+                   - 'blocklist' to enable blocklist matching
+                   - Unsuffixed labels are treated as NER labels for backward compatibility
+                   If None, uses profile labels or defaults
+            gliner_threshold: GLiNER confidence threshold (0.0-1.0, default 0.3)
+        """
         if not text:
             return text
 
-        # Collect entities from GLiNER
-        entities = self._find_entities_with_gliner(text)
+        # Load profile configuration
+        profile_labels = None
+        if profile:
+            profile_labels = self.config_cache.get_gliner_labels(profile)
+
+        # Determine which labels to use (priority: parameter > profile > default)
+        active_labels = labels or profile_labels or self.labels
+
+        # Check if blocklist is requested
+        enable_blocklist = 'blocklist' in active_labels if isinstance(active_labels, list) else False
+        if enable_blocklist:
+            active_labels = [l for l in active_labels if l != 'blocklist']
+
+        # Separate NER labels from regex entity types
+        gliner_labels, regex_entity_types = self._separate_labels(active_labels)
+
+        # Collect entities from GLiNER (only if there are GLiNER labels)
+        entities = []
+        if gliner_labels:
+            entities = self._find_entities_with_gliner(text, threshold=gliner_threshold,
+                                                       custom_labels=gliner_labels)
 
         # Add profile-based entities if profile is specified
         if profile:
-            blocklist = self.config_cache.get_blocklist(profile)
+            blocklist = self.config_cache.get_blocklist(profile) if enable_blocklist else set()
             grantlist = self.config_cache.get_grantlist(profile)
             regex_patterns = self.config_cache.get_regex_patterns(profile)
 
@@ -167,9 +284,11 @@ class Anonymizer(AnonymizerInterface):
                 blocklist_entities = self._find_blocklist_entities(text, blocklist)
                 entities.extend(blocklist_entities)
 
-            # Add regex pattern entities
-            if regex_patterns:
-                regex_entities = self._find_entities_with_regex(text, regex_patterns)
+            # Add regex pattern entities (filtered by requested labels)
+            if regex_patterns and regex_entity_types is not None:
+                regex_entities = self._find_entities_with_regex(
+                    text, regex_patterns, allowed_types=regex_entity_types
+                )
                 entities.extend(regex_entities)
 
             # Filter out grantlisted entities
@@ -192,18 +311,29 @@ class Anonymizer(AnonymizerInterface):
 
         return result
 
-    def anonymize(self, text: str, user_languages: Optional[List[str]] = None,
+    def anonymize(self, text: str,
+                  labels: Optional[List[str]] = None,
+                  user_languages: Optional[List[str]] = None,
                   user_recognizers: Optional[List[str]] = None,
-                  use_labels: bool = True, profile: Optional[str] = None) -> AnonymizerResult:
+                  use_labels: bool = True,
+                  profile: str = 'default',
+                  gliner_threshold: float = 0.6) -> AnonymizerResult:
         """
         Anonymize text and return detailed results.
 
         Args:
             text: Text to anonymize
-            user_languages: Languages to use (currently unused, kept for API compatibility)
-            user_recognizers: Specific recognizers to use (currently unused, kept for API compatibility)
-            use_labels: Whether to use labels in output (currently unused, kept for API compatibility)
+            labels: List of entity labels to detect with suffixes:
+                   - '_ner' for NER/GLiNER labels (e.g., 'person_ner', 'email_ner')
+                   - '_regex' for regex patterns (e.g., 'fi_hetu_regex', 'fi_puhelin_regex')
+                   - 'blocklist' to enable blocklist matching
+                   - Unsuffixed labels treated as NER for backward compatibility
+                   Examples: ['person_ner', 'email_ner', 'fi_hetu_regex', 'blocklist']
+            user_languages: Languages to use (deprecated, kept for compatibility)
+            user_recognizers: Deprecated - use 'labels' parameter instead
+            use_labels: Whether to use labels in output (deprecated)
             profile: Profile name for blocklist/grantlist/regex patterns
+            gliner_threshold: GLiNER confidence threshold (0.0-1.0, default 0.3)
 
         Returns:
             AnonymizerResult with anonymized text and statistics
@@ -211,7 +341,17 @@ class Anonymizer(AnonymizerInterface):
         if not text:
             return AnonymizerResult(anonymized_text=None, statistics={}, details={})
 
-        anonymized_text = self.anonymize_text(text, profile=profile)
+        # Handle backward compatibility: user_recognizers -> labels
+        if user_recognizers is not None and labels is None:
+            labels = user_recognizers
+
+        anonymized_text = self.anonymize_text(
+            text,
+            profile=profile,
+            labels=labels,
+            gliner_threshold=gliner_threshold
+        )
+
         statistics = {}
         details = {}
 
@@ -227,4 +367,3 @@ class Anonymizer(AnonymizerInterface):
                 details[entity_type] = [entity_text]
 
         return AnonymizerResult(anonymized_text=anonymized_text, statistics=statistics, details=details)
-

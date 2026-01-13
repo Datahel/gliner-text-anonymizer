@@ -38,9 +38,11 @@ logger.info("Config watcher started (enabled=%s)", WATCHER_ENABLED)
 def anonymize(request_data: AnonymizerApiRequest) -> AnonymizerApiResponse:
     anonymizer_result = text_anonymizer.anonymize(
         request_data.text,
+        labels=request_data.labels,
         user_languages=request_data.languages,
-        user_recognizers=request_data.recognizers,
+        user_recognizers=request_data.recognizers,  # Backward compatibility
         profile=request_data.profile,
+        gliner_threshold=request_data.gliner_threshold,
     )
 
     response: AnonymizerApiResponse = AnonymizerApiResponse()
@@ -55,9 +57,11 @@ def anonymize_batch(request_data: List[AnonymizerApiRequest]) -> List[Anonymizer
     for request in request_data:
         anonymizer_result = text_anonymizer.anonymize(
             request.text,
+            labels=request.labels,
             user_languages=request.languages,
-            user_recognizers=request.recognizers,
+            user_recognizers=request.recognizers,  # Backward compatibility
             profile=request.profile,
+            gliner_threshold=request.gliner_threshold,
         )
 
         response: AnonymizerApiResponse = AnonymizerApiResponse()
