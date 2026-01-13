@@ -1,0 +1,4 @@
+# Blocklist - words to always anonymize when using "example" profile
+blockword123
+# This is also in grantlist and therefore will never be anonymized
+grantword123

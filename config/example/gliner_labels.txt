@@ -1,0 +1,16 @@
+# GLiNER labels for entity detection
+# One label per line. Comments start with #
+# Full list of supported labels at: docs/GLINER_LABELS.md
+
+# Core entities (recommended for Finnish)
+person
+organization
+phone number
+email
+address
+
+# Additional useful entities
+date of birth
+social security number
+national id number
+

@@ -3,7 +3,7 @@ import os
 import random
 import time
 
-import test_data
+import common_test_data as test_data
 from text_anonymizer import TextAnonymizer
 from text_anonymizer.constants import RECOGNIZER_SPACY_ADDRESS
 from text_anonymizer.default_settings import RECOGNIZER_SPACY_FI

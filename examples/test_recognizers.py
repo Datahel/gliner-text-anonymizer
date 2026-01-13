@@ -7,6 +7,9 @@ from text_anonymizer.recognizers.fi_address_recognizer import FiAddressRecognize
 from text_anonymizer.recognizers.fi_property_identifier_recognizer import FiRealPropertyIdentifierRecognizer
 
 '''
+THIS CLASS MUST BE 
+
+
 Example of using the Presidio analyzer with Finnish recognizers without the anoymizer class.
 '''
 

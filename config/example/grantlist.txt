@@ -3,7 +3,8 @@
 # Lines starting with # are comments
 
 # Common Finnish words that should not be anonymized
+example321
+esimerkki123
 helsinki
 suomi
-esimerkki123
 

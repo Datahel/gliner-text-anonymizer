@@ -1,12 +1,12 @@
 from typing import List
 from text_anonymizer import TextAnonymizer
 '''
-Base test class for testing single recognizer
+Base test class for testing single regex labels.
 Pass recognizer object and test strings as constructor parameters
 '''
 
 
-class BaseRecognizerTest():
+class BaseRegexTest():
 
     def __init__(self, regex_label, test_cases: List[str], bad_test_cases: List[str] = None):
         self.test_cases = test_cases
