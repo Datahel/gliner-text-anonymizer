@@ -1,2 +1,3 @@
 # Grantlist (allowlist) - words to protect from anonymization when using "example" profile
 grantword123
+sta

@@ -239,7 +239,7 @@ class Anonymizer(AnonymizerInterface):
 
         Args:
             text: Text to anonymize
-            profile: Profile name for configuration
+            profile: Profile name for configuration (defaults to 'default' if None)
             labels: List of entity labels to detect with suffixes:
                    - '_ner' for NER/GLiNER labels (e.g., 'person_ner', 'email_ner')
                    - '_regex' for regex patterns (e.g., 'fi_hetu_regex', 'fi_puhelin_regex')
@@ -251,10 +251,11 @@ class Anonymizer(AnonymizerInterface):
         if not text:
             return text
 
+        # Use 'default' profile if none specified to ensure regex patterns are applied
+        effective_profile = profile if profile else 'default'
+
         # Load profile configuration
-        profile_labels = None
-        if profile:
-            profile_labels = self.config_cache.get_gliner_labels(profile)
+        profile_labels = self.config_cache.get_gliner_labels(effective_profile)
 
         # Determine which labels to use (priority: parameter > profile > default)
         active_labels = labels or profile_labels or self.labels
@@ -273,27 +274,45 @@ class Anonymizer(AnonymizerInterface):
             entities = self._find_entities_with_gliner(text, threshold=gliner_threshold,
                                                        custom_labels=gliner_labels)
 
-        # Add profile-based entities if profile is specified
+        # Always load regex patterns from effective_profile (defaults to 'default')
+        # Always load blocklist/grantlist when an explicit profile is provided
+        regex_patterns = self.config_cache.get_regex_patterns(effective_profile)
+
         if profile:
-            blocklist = self.config_cache.get_blocklist(profile) if enable_blocklist else set()
+            blocklist = self.config_cache.get_blocklist(profile)
             grantlist = self.config_cache.get_grantlist(profile)
-            regex_patterns = self.config_cache.get_regex_patterns(profile)
+        else:
+            blocklist = set()
+            grantlist = set()
 
-            # Add blocklist entities
-            if blocklist:
-                blocklist_entities = self._find_blocklist_entities(text, blocklist)
-                entities.extend(blocklist_entities)
+        # Add blocklist entities
+        if blocklist:
+            blocklist_entities = self._find_blocklist_entities(text, blocklist)
+            entities.extend(blocklist_entities)
 
-            # Add regex pattern entities (filtered by requested labels)
-            if regex_patterns and regex_entity_types is not None:
-                regex_entities = self._find_entities_with_regex(
-                    text, regex_patterns, allowed_types=regex_entity_types
-                )
-                entities.extend(regex_entities)
+        # Add regex pattern entities from the profile
+        # Always apply all regex patterns from the profile, regardless of active_labels
+        if regex_patterns:
+            for pattern_def in regex_patterns:
+                entity_type = pattern_def['entity_type']
+                pattern = pattern_def['pattern']
 
-            # Filter out grantlisted entities
-            if grantlist:
-                entities = self._filter_grantlist(entities, grantlist)
+                try:
+                    for match in re.finditer(pattern, text):
+                        entities.append({
+                            'start': match.start(),
+                            'end': match.end(),
+                            'text': match.group(),
+                            'label': entity_type,
+                            'score': 1.0  # Regex matches have perfect score
+                        })
+                except re.error as e:
+                    if self.debug_mode:
+                        print(f"Warning: Invalid regex pattern '{pattern}': {e}")
+
+        # Filter out grantlisted entities
+        if grantlist:
+            entities = self._filter_grantlist(entities, grantlist)
 
         # Remove overlapping entities
         entities = self._remove_overlapping_entities(entities)

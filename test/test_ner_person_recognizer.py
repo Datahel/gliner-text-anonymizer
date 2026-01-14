@@ -14,8 +14,10 @@ Tests detection and anonymization of person names using GLiNER NER:
 
 import unittest
 
-import test_data
-from base_recoginizer_test import BaseRecognizerTest
+from common_test_data import (
+    test_names_fi, test_names_en
+)
+from common_regex_test_base import BaseRegexTest
 
 
 class TestPersonNERFinnish(unittest.TestCase):
@@ -23,8 +25,8 @@ class TestPersonNERFinnish(unittest.TestCase):
 
     def test_person_ner_finnish(self):
         """Test Finnish person name NER recognition."""
-        test_cases = test_data.test_names_fi
-        test_base = BaseRecognizerTest('person_ner', test_cases)
+        test_cases = test_names_fi
+        test_base = BaseRegexTest('person_ner', test_cases)
         self.assertTrue(test_base.test_recognizer(), 'Finnish person NER test failed.')
 
 
@@ -33,8 +35,8 @@ class TestPersonNEREnglish(unittest.TestCase):
 
     def test_person_ner_english(self):
         """Test English person name NER recognition."""
-        test_cases = test_data.test_names_en
-        test_base = BaseRecognizerTest('person_ner', test_cases)
+        test_cases = test_names_en
+        test_base = BaseRegexTest('person_ner', test_cases)
         self.assertTrue(test_base.test_recognizer(), 'English person NER test failed.')
 
 
