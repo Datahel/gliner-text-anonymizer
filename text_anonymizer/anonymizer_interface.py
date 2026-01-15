@@ -61,35 +61,35 @@ class Anonymizer(ABC):
             profile: Profile name for custom configurations (legacy parameter)
 
         Returns:
-            AnonymizerResult object with anonymized text, statistics, and details
+            AnonymizerResult object with anonymized text, summary, and details
         """
         if not text:
-            return AnonymizerResult(anonymized_text=None, statistics={}, details={})
+            return AnonymizerResult(anonymized_text=None, summary={}, details={})
 
         # Call the abstract method to get anonymized text
         anonymized_text = self.anonymize_text(text)
 
         # For GLiNER implementation, we'll parse the anonymized text to extract entities
-        statistics, details = self._extract_statistics_from_anonymized_text(text, anonymized_text)
+        summary, details = self._extract_summary_from_anonymized_text(text, anonymized_text)
 
         return AnonymizerResult(
             anonymized_text=anonymized_text,
-            statistics=statistics,
+            summary=summary,
             details=details
         )
 
-    def _extract_statistics_from_anonymized_text(self, original_text: str, anonymized_text: str) -> tuple:
+    def _extract_summary_from_anonymized_text(self, original_text: str, anonymized_text: str) -> tuple:
         """
-        Extract statistics and details from the anonymized text by comparing with original.
+        Extract summary and details from the anonymized text by comparing with original.
 
         Args:
             original_text: The original text
             anonymized_text: The anonymized text with placeholders like <PERSON>
 
         Returns:
-            Tuple of (statistics dict, details dict)
+            Tuple of (summary dict, details dict)
         """
-        statistics = {}
+        summary = {}
         details = {}
 
         # This is a basic implementation - subclasses can override for better extraction
@@ -107,14 +107,14 @@ class Anonymizer(ABC):
             # Find corresponding position in original text
             # This is approximate - subclasses should implement better tracking
 
-            # Update statistics
-            if entity_type in statistics:
-                statistics[entity_type] += 1
+            # Update summary
+            if entity_type in summary:
+                summary[entity_type] += 1
             else:
-                statistics[entity_type] = 1
+                summary[entity_type] = 1
                 details[entity_type] = []
 
             # Adjust offset for next match
             offset += len(match.group(0))
 
-        return statistics, details
+        return summary, details

@@ -18,7 +18,17 @@ from .config_cache import ConfigCache
 
 '''
 Full List of Gliner supported PII Labels:
-person, organization, phone number, address, passport number, email, credit card number, social security number, health insurance id number, date of birth, mobile phone number, bank account number, medication, cpf, driver's license number, tax identification number, medical condition, identity card number, national id number, ip address, email address, iban, credit card expiration date, username, health insurance number, registration number, student id number, insurance number, flight number, landline phone number, blood type, cvv, reservation number, digital signature, social media handle, license plate number, cnpj, postal code, passport_number, serial number, vehicle registration number, credit card brand, fax number, visa number, insurance company, identity document number, transaction number, national health insurance number, cvc, birth certificate number, train ticket number, passport expiration date, and social_security_number.
+person, organization, phone number, address, passport number, email, credit card number, 
+social security number, health insurance id number, date of birth, mobile phone number, 
+bank account number, medication, cpf, driver's license number, tax identification number, 
+medical condition, identity card number, national id number, ip address, email address, 
+iban, credit card expiration date, username, health insurance number, registration number, 
+student id number, insurance number, flight number, landline phone number, blood type, 
+cvv, reservation number, digital signature, social media handle, license plate number, 
+cnpj, postal code, passport_number, serial number, vehicle registration number, 
+credit card brand, fax number, visa number, insurance company, identity document number, 
+transaction number, national health insurance number, cvc, birth certificate number, 
+train ticket number, passport expiration date, and social_security_number.
 '''
 
 class Anonymizer(AnonymizerInterface):
@@ -46,6 +56,7 @@ class Anonymizer(AnonymizerInterface):
             "fi_puhelin_regex",
             "fi_rekisteri_regex",
             "fi_kiinteisto_regex",
+            "iban_regex",
             "tiedosto_regex"
         ]
         self._last_entities = []
@@ -291,24 +302,15 @@ class Anonymizer(AnonymizerInterface):
             entities.extend(blocklist_entities)
 
         # Add regex pattern entities from the profile
-        # Always apply all regex patterns from the profile, regardless of active_labels
+        # If the caller requested specific regex types (via labels), only apply those.
+        # Otherwise (no specific regex labels requested) apply all profile regex patterns.
         if regex_patterns:
-            for pattern_def in regex_patterns:
-                entity_type = pattern_def['entity_type']
-                pattern = pattern_def['pattern']
-
-                try:
-                    for match in re.finditer(pattern, text):
-                        entities.append({
-                            'start': match.start(),
-                            'end': match.end(),
-                            'text': match.group(),
-                            'label': entity_type,
-                            'score': 1.0  # Regex matches have perfect score
-                        })
-                except re.error as e:
-                    if self.debug_mode:
-                        print(f"Warning: Invalid regex pattern '{pattern}': {e}")
+            if regex_entity_types is None:
+                # No specific regex types requested -> apply all patterns from profile
+                entities.extend(self._find_entities_with_regex(text, regex_patterns))
+            else:
+                # Apply only requested regex entity types
+                entities.extend(self._find_entities_with_regex(text, regex_patterns, allowed_types=regex_entity_types))
 
         # Filter out grantlisted entities
         if grantlist:
@@ -355,10 +357,10 @@ class Anonymizer(AnonymizerInterface):
             gliner_threshold: GLiNER confidence threshold (0.0-1.0, default 0.3)
 
         Returns:
-            AnonymizerResult with anonymized text and statistics
+            AnonymizerResult with anonymized text and summary
         """
         if not text:
-            return AnonymizerResult(anonymized_text=None, statistics={}, details={})
+            return AnonymizerResult(anonymized_text=None, summary={}, details={})
 
         # Handle backward compatibility: user_recognizers -> labels
         if user_recognizers is not None and labels is None:
@@ -371,18 +373,18 @@ class Anonymizer(AnonymizerInterface):
             gliner_threshold=gliner_threshold
         )
 
-        statistics = {}
+        summary = {}
         details = {}
 
         for entity in self._last_entities:
             entity_type = self._map_entity_label(entity['label'])
             entity_text = entity.get('text', text[entity['start']:entity['end']])
 
-            if entity_type in statistics:
-                statistics[entity_type] += 1
+            if entity_type in summary:
+                summary[entity_type] += 1
                 details[entity_type].append(entity_text)
             else:
-                statistics[entity_type] = 1
+                summary[entity_type] = 1
                 details[entity_type] = [entity_text]
 
-        return AnonymizerResult(anonymized_text=anonymized_text, statistics=statistics, details=details)
+        return AnonymizerResult(anonymized_text=anonymized_text, summary=summary, details=details)

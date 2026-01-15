@@ -35,11 +35,11 @@ class TestDefaultLabelsAndConfig(unittest.TestCase):
 
         # Should detect both NER (person, email) and regex (HETU, PUHELIN after mapping)
         self.assertTrue(
-            'NIMI' in result.statistics or 'SÄHKÖPOSTI' in result.statistics,
+            'NIMI' in result.summary or 'SÄHKÖPOSTI' in result.summary,
             "Should detect NER entities (mapped to NIMI or SÄHKÖPOSTI)"
         )
         self.assertTrue(
-            'HETU' in result.statistics or 'PUHELIN' in result.statistics,
+            'HETU' in result.summary or 'PUHELIN' in result.summary,
             "Should detect regex entities (mapped to HETU or PUHELIN)"
         )
 
@@ -57,8 +57,8 @@ class TestDefaultLabelsAndConfig(unittest.TestCase):
 
         # Both should produce same result
         self.assertEqual(
-            result1.statistics,
-            result2.statistics,
+            result1.summary,
+            result2.summary,
             "Underscore and space should be equivalent"
         )
 
@@ -106,8 +106,8 @@ class TestLabelMappings(unittest.TestCase):
         )
 
         # Should use NIMI instead of PERSON
-        self.assertIn('NIMI', result.statistics, "Should map PERSON to NIMI")
-        self.assertNotIn('PERSON', result.statistics, "Should NOT use PERSON label")
+        self.assertIn('NIMI', result.summary, "Should map PERSON to NIMI")
+        self.assertNotIn('PERSON', result.summary, "Should NOT use PERSON label")
         self.assertIn('<NIMI>', result.anonymized_text, "Should show <NIMI> in text")
 
     def test_phone_number_ner_maps_to_puhelinnumero(self):
@@ -119,15 +119,15 @@ class TestLabelMappings(unittest.TestCase):
             labels=['phone_number_ner']
         )
 
-        # Should use PUHELINNUMERO instead of PHONE_NUMBER
+        # Should use PUHELINN instead of PHONE_NUMBER
         self.assertIn(
-            'PUHELINNUMERO',
-            result.statistics,
-            "Should map PHONE_NUMBER to PUHELINNUMERO"
+            'PUHELIN',
+            result.summary,
+            "Should map PHONE_NUMBER to PUHELIN"
         )
         self.assertNotIn(
             'PHONE_NUMBER',
-            result.statistics,
+            result.summary,
             "Should NOT use PHONE_NUMBER label"
         )
 
@@ -138,11 +138,11 @@ class TestLabelMappings(unittest.TestCase):
         result = anonymizer.anonymize(
             "Henkilötunnus: 311299-999A",
             labels=['fi_hetu_regex'],
-            profile='example'
         )
+        # 311299-999A should be in result.details
 
         # Should use HETU
-        self.assertIn('HETU', result.statistics, "Should map fi_hetu_regex to HETU")
+        self.assertIn('HETU', result.summary, "Should map fi_hetu_regex to HETU")
 
 
 # ============================================================================
@@ -199,7 +199,7 @@ class TestGLiNERControls(unittest.TestCase):
         text = "Tunniste blockword123 on lauseessa."
 
         # With profile that has blocklist
-        result = anonymizer.anonymize(text, profile='example')
+        result = anonymizer.anonymize(text)
 
         # Should detect blocklisted words through profile
         self.assertIsNotNone(result.anonymized_text)

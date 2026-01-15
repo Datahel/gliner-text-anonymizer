@@ -87,7 +87,7 @@ class TestAnonymizerAPI(unittest.TestCase):
 
         data = response.json()
         self.assertIn("anonymized_txt", data)
-        self.assertIn("statistics", data)
+        self.assertIn("summary", data)
         self.assertIsNotNone(data["anonymized_txt"])
 
         # Phone number should be anonymized
@@ -108,10 +108,10 @@ class TestAnonymizerAPI(unittest.TestCase):
         data = response.json()
         self.assertNotIn("311299-999A", data["anonymized_txt"])
 
-        # Check statistics
-        if data["statistics"]:
-            self.assertIsInstance(data["statistics"], dict)
-            logger.info("SSN anonymization statistics: %s", data["statistics"])
+        # Check summary
+        if data["summary"]:
+            self.assertIsInstance(data["summary"], dict)
+            logger.info("SSN anonymization summary: %s", data["summary"])
 
     def test_anonymize_with_profile_blocklist(self):
         """Test anonymization with a profile (blocklist/grantlist)."""
@@ -130,14 +130,14 @@ class TestAnonymizerAPI(unittest.TestCase):
         # Blocklisted word should be anonymized
         self.assertNotIn("blockword123", data["anonymized_txt"])
 
-        # Check statistics for MUU_TUNNISTE (custom identifier)
-        self.assertIn("statistics", data)
-        self.assertIsInstance(data["statistics"], dict)
+        # Check summary for MUU_TUNNISTE (custom identifier)
+        self.assertIn("summary", data)
+        self.assertIsInstance(data["summary"], dict)
 
-        if "MUU_TUNNISTE" in data["statistics"]:
-            self.assertGreater(data["statistics"]["MUU_TUNNISTE"], 0)
+        if "MUU_TUNNISTE" in data["summary"]:
+            self.assertGreater(data["summary"]["MUU_TUNNISTE"], 0)
             logger.info("Profile blocklist working: MUU_TUNNISTE count = %d",
-                       data["statistics"]["MUU_TUNNISTE"])
+                       data["summary"]["MUU_TUNNISTE"])
 
     def test_anonymize_with_profile_grantlist(self):
         """Test that grantlisted items are protected when using profile."""
@@ -195,10 +195,10 @@ class TestAnonymizerAPI(unittest.TestCase):
 
         # Without profile, blockword123 should NOT be detected as custom identifier
         # It should remain in text (unless it matches another recognizer)
-        statistics = data.get("statistics", {})
+        summary = data.get("summary", {})
 
         # MUU_TUNNISTE should not be present without profile
-        self.assertNotIn("MUU_TUNNISTE", statistics)
+        self.assertNotIn("MUU_TUNNISTE", summary)
         logger.info("Blocklist correctly not applied without profile")
 
     def test_anonymize_batch(self):
@@ -233,7 +233,7 @@ class TestAnonymizerAPI(unittest.TestCase):
         # Verify each item has required structure
         for item in data:
             self.assertIn("anonymized_txt", item)
-            self.assertIn("statistics", item)
+            self.assertIn("summary", item)
 
         # Check first item (SSN)
         self.assertNotIn("311299-999A", data[0]["anonymized_txt"])
@@ -269,11 +269,11 @@ class TestAnonymizerAPI(unittest.TestCase):
         self.assertEqual(len(data), 2)
 
         # First should not detect blockword123 as MUU_TUNNISTE
-        stats1 = data[0].get("statistics", {})
+        stats1 = data[0].get("summary", {})
         self.assertNotIn("MUU_TUNNISTE", stats1)
 
         # Second should detect blockword123 as MUU_TUNNISTE
-        stats2 = data[1].get("statistics", {})
+        stats2 = data[1].get("summary", {})
         if "MUU_TUNNISTE" in stats2:
             self.assertGreater(stats2["MUU_TUNNISTE"], 0)
 
@@ -326,8 +326,8 @@ class TestAnonymizerAPI(unittest.TestCase):
         self.assertNotIn("040-1234567", data["anonymized_txt"])
         logger.info("Default language (Finnish) working correctly")
 
-    def test_anonymize_statistics_structure(self):
-        """Test that statistics are returned in correct format with expected entities."""
+    def test_anonymize_summary_structure(self):
+        """Test that summary are returned in correct format with expected entities."""
         payload = {
             "text": "Contact: 040-1234567, SSN: 311299-999A",
             "languages": ["fi"],
@@ -338,30 +338,30 @@ class TestAnonymizerAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
         data = response.json()
-        self.assertIn("statistics", data)
-        self.assertIsInstance(data["statistics"], dict)
+        self.assertIn("summary", data)
+        self.assertIsInstance(data["summary"], dict)
 
         # Both phone and SSN should be anonymized
         self.assertNotIn("040-1234567", data["anonymized_txt"])
         self.assertNotIn("311299-999A", data["anonymized_txt"])
 
         # Statistics should not be empty since we have entities
-        self.assertTrue(data["statistics"], "Statistics should not be empty for text with entities")
+        self.assertTrue(data["summary"], "Statistics should not be empty for text with entities")
 
-        # Verify statistics structure
-        for entity_type, count in data["statistics"].items():
+        # Verify summary structure
+        for entity_type, count in data["summary"].items():
             self.assertIsInstance(entity_type, str)
             self.assertIsInstance(count, int)
             self.assertGreater(count, 0)
 
         # Check for expected entity types (phone and SSN)
-        has_phone = "PUHELIN" in data["statistics"] or "PHONE_NUMBER" in data["statistics"]
-        has_ssn = "FI_SSN" in data["statistics"] or "HETU" in data["statistics"]
+        has_phone = "PUHELIN" in data["summary"] or "PHONE_NUMBER" in data["summary"]
+        has_ssn = "FI_SSN" in data["summary"] or "HETU" in data["summary"]
 
         self.assertTrue(has_phone or has_ssn,
-                       "Should detect at least phone or SSN in statistics")
+                       "Should detect at least phone or SSN in summary")
 
-        logger.info("Statistics structure valid: %s", data["statistics"])
+        logger.info("Statistics structure valid: %s", data["summary"])
 
     def test_anonymize_nonexistent_profile(self):
         """Test that nonexistent profile is handled gracefully without custom recognizers."""
@@ -380,8 +380,8 @@ class TestAnonymizerAPI(unittest.TestCase):
         self.assertIn("anonymized_txt", data)
 
         # Nonexistent profile should NOT trigger custom recognizers
-        statistics = data.get("statistics", {})
-        self.assertNotIn("MUU_TUNNISTE", statistics,
+        summary = data.get("summary", {})
+        self.assertNotIn("MUU_TUNNISTE", summary,
                          "Nonexistent profile should not apply blocklist")
 
         # blockword123 should remain in text (no custom recognizer applied)
@@ -421,11 +421,11 @@ class TestAnonymizerAPI(unittest.TestCase):
             self.assertNotIn(test_word, data["anonymized_txt"],
                            f"{test_word} should be anonymized by pattern '{pattern_name}'")
 
-            # Check statistics for VARCODE entity
-            statistics = data.get("statistics", {})
-            self.assertIn("VARCODE", statistics,
+            # Check summary for VARCODE entity
+            summary = data.get("summary", {})
+            self.assertIn("VARCODE", summary,
                          f"VARCODE entity should be detected for '{test_word}' (pattern: {pattern_name})")
-            self.assertGreater(statistics["VARCODE"], 0,
+            self.assertGreater(summary["VARCODE"], 0,
                               f"VARCODE count should be > 0 for '{test_word}'")
 
         logger.info("Custom regex patterns tested successfully: %d patterns verified", len(test_cases))
@@ -456,8 +456,8 @@ class TestAnonymizerAPI(unittest.TestCase):
             # Word should remain (not matched by VARCODE patterns)
             # Note: Some words might still be anonymized by GLiNER's standard recognizers
             # We only check that they're NOT recognized as VARCODE entities
-            statistics = data.get("statistics", {})
-            self.assertNotIn("VARCODE", statistics,
+            summary = data.get("summary", {})
+            self.assertNotIn("VARCODE", summary,
                            f"VARCODE entity should not be detected for non-matching word '{word}'")
 
         logger.info("Verified non-matching words don't trigger VARCODE patterns: %d words tested", len(non_matching_words))
@@ -486,9 +486,9 @@ class TestAnonymizerAPI(unittest.TestCase):
             self.assertIn(word, data["anonymized_txt"],
                          f"{word} should NOT be anonymized without valid profile")
 
-            # VARCODE entity should NOT be in statistics
-            statistics = data.get("statistics", {})
-            self.assertNotIn("VARCODE", statistics,
+            # VARCODE entity should NOT be in summary
+            summary = data.get("summary", {})
+            self.assertNotIn("VARCODE", summary,
                            f"VARCODE entity should not be detected without valid profile for '{word}'")
 
         logger.info("Verified regex patterns not applied with nonexistent profile: %d words tested", len(test_words))
@@ -540,8 +540,8 @@ class TestAnonymizerAPIEdgeCases(unittest.TestCase):
         self.assertNotIn("040-0000049", data["anonymized_txt"])
 
         # Statistics should show phone detections
-        statistics = data.get("statistics", {})
-        phone_count = statistics.get("PUHELIN", statistics.get("PHONE_NUMBER", 0))
+        summary = data.get("summary", {})
+        phone_count = summary.get("PUHELIN", summary.get("PHONE_NUMBER", 0))
         self.assertGreater(phone_count, 0, "Should detect phone numbers in long text")
 
         logger.info("Long text processed successfully: %d phone numbers detected", phone_count)
@@ -567,10 +567,10 @@ class TestAnonymizerAPIEdgeCases(unittest.TestCase):
         self.assertIn("@#$%^&*()", data["anonymized_txt"])
 
         # Statistics should show phone detection
-        statistics = data.get("statistics", {})
+        summary = data.get("summary", {})
         self.assertTrue(
-            "PUHELIN" in statistics or "PHONE_NUMBER" in statistics,
-            "Phone number should be detected in statistics"
+            "PUHELIN" in summary or "PHONE_NUMBER" in summary,
+            "Phone number should be detected in summary"
         )
 
         logger.info("Special characters preserved while phone anonymized: %s", data["anonymized_txt"])

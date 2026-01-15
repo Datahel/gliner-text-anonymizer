@@ -47,7 +47,7 @@ def anonymize(request_data: AnonymizerApiRequest) -> AnonymizerApiResponse:
 
     response: AnonymizerApiResponse = AnonymizerApiResponse()
     response.anonymized_txt = anonymizer_result.anonymized_text
-    response.statistics = anonymizer_result.statistics
+    response.summary = anonymizer_result.summary
     return response
 
 
@@ -66,7 +66,7 @@ def anonymize_batch(request_data: List[AnonymizerApiRequest]) -> List[Anonymizer
 
         response: AnonymizerApiResponse = AnonymizerApiResponse()
         response.anonymized_txt = anonymizer_result.anonymized_text
-        response.statistics = anonymizer_result.statistics
+        response.summary = anonymizer_result.summary
         responses.append(response)
 
     return responses

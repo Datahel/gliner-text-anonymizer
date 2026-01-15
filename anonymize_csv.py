@@ -156,8 +156,8 @@ if csv_file:
                                 text = row[i]
                                 if text:    # can be empty
                                     anonymized = text_anonymizer.anonymize(text)
-                                    if anonymized.statistics:
-                                        statistics_list.append(anonymized.statistics)
+                                    if anonymized.summary:
+                                        statistics_list.append(anonymized.summary)
                                     if anonymized.details:
                                         details_list.append(anonymized.details)
                                     writerow[i] = anonymized.anonymized_text

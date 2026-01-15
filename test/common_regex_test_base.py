@@ -32,7 +32,7 @@ class BaseRegexTest():
 
             # Check if entities were found
             entities_found = False
-            if len(res.statistics) > 0:
+            if len(res.summary) > 0:
                 entities_found = True
 
             # Check if text was anonymized (changed from original)
@@ -45,7 +45,7 @@ class BaseRegexTest():
             current_test_pass = entities_found and text_anonymized and details_exist
 
             print(f'Positive test: "{text}"')
-            print(f'  - Entities found: {entities_found} (statistics: {res.statistics})')
+            print(f'  - Entities found: {entities_found} (summary: {res.summary})')
             print(f'  - Text anonymized: {text_anonymized}')
             print(f'    Original: "{text}"')
             print(f'    Anonymized: "{res.anonymized_text}"')
@@ -61,7 +61,7 @@ class BaseRegexTest():
             res = self.anonymizer.anonymize(text=text, labels=[self.regex_label])
 
             # Check that no entities are detected for this specific label
-            entities_detected = len(res.statistics) > 0
+            entities_detected = len(res.summary) > 0
 
             # Text should remain unchanged if no entities found
             text_unchanged = res.anonymized_text == text
@@ -69,7 +69,7 @@ class BaseRegexTest():
             current_test_pass = not entities_detected and text_unchanged
 
             print(f'Negative test: "{text}"')
-            print(f'  - No entities detected: {not entities_detected} (statistics: {res.statistics})')
+            print(f'  - No entities detected: {not entities_detected} (summary: {res.summary})')
             print(f'  - Text unchanged: {text_unchanged}')
             print(f'  - Pass: {current_test_pass}')
 

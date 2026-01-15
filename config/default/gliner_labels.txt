@@ -1,0 +1,10 @@
+# GLiNER labels for entity detection (Default Profile)
+# One label per line. Comments start with #
+# Full list of supported labels at: docs/GLINER_LABELS.md
+
+# Core NER entities
+person
+phone number
+email
+address
+

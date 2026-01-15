@@ -50,7 +50,7 @@ def main():
         a = ' '.join(doc)
         if a:
             result = text_anonymizer.anonymize(a)
-            return result.anonymized_text, result.statistics, result.details
+            return result.anonymized_text, result.summary, result.details
         return None, None, None
 
 

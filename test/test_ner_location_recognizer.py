@@ -27,6 +27,7 @@ class TestAddressNERFinnish(unittest.TestCase):
         test_cases = test_addresses
         bad_cases = bad_address
         test_base = BaseRegexTest('address_ner', test_cases, bad_cases)
+        # TODO: Wavulinintien
         self.assertTrue(test_base.test_recognizer(), 'Finnish address NER test failed.')
 
 

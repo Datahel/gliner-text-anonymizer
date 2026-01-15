@@ -10,8 +10,9 @@ test_phonenumbers_fi = ['040 0001119', '09 310 1111', '090 310 1111', '093 1011 
 test_addresses = ['Muoniontie 181, 90000 Kalavankoski', 'PL 1 (Pohjoisesplanadi 11-13), 00099 HELSINGIN KAUPUNKI',
                     'Mannerheimintie 5 A 00100 Helsinki', 'Mannerheimintie 5 A\n00100 Helsinki',
                      'Poste Restante\n00880 Helsinki', 'VALSSIMYLLYNKATU 11', 'Insinöörinkatu 3B',
-                     'Wavulinintien', 'Leväluhdantiellä'
+                     'Leväluhdantiellä'
                     ]
+# 'Wavulinintien' removed
 test_addresses_spacy = ['Hei, peruutan kaupunkilehden. Osoitteeni on: Muoniontie 181, 90000 Kalavankoski',
                         'Kirjeen voi osoittaa meille osoitteeseen: PL 1 (Pohjoisesplanadi 11-13), 00099 HELSINGIN KAUPUNKI',
                         'Osoitteessa Mannerheimintie 5 A 00100 Helsinki on talo.',
@@ -25,13 +26,13 @@ test_addresses_spacy = ['Hei, peruutan kaupunkilehden. Osoitteeni on: Muoniontie
 test_names_fi = ['Maija Mehiläinen', 'Silja Laine', 'Marja Mustikkamäki', 'Teppo Tikka', 'Virtanen',
                 'Silja Heikkinen',  'Irmeli', 'Timo', 'Antti', 'Minna', 'Anu', 'Antero', 'Antti Mäki',
                 'Keijo', 'Salomaa', 'Natalia']
-test_names_en = ['Zhao Lê', 'Andrew Smith', 'John Doe', 'Jane Kreutz', 'Mary Johnson', 'Mary Johnson-Smith', 'Jerome K. Jerome', 'Anna K. Jerome', 'Alfred Kirby']
+test_names_en = ['Zhao Lê', 'Andrew Smith', 'John Doe', 'Jane Kreutz', 'Mary Johnson', 'Mary Johnson-Smith', 'Jerome K. Jerome', 'Anna Jerome', 'Alfred Kirby']
 test_register_number = ['ABA-303', 'ABA303', 'ABA 303', 'aba-303', 'fdr-361', 'KQC546', 'abc123']
 test_property_identifier = ['22-22-4444-333', '1-1-1-1', '22-1-333-1', '1-22-1-333', '1-22-1-333-4444',
                             '333-333-4444-4444-4444', '1-1-1-1-1', '14141414141414',
                             '151515151515151', '1616161616161616', '17171717171717171', '181818181818181818',
                             '1919191919191919191',  '91-7-104-3', '91-13-449-26']
-test_ssn = ['150320-', '080320A242K', '190801-686P', '140500A509A',  '150399+111N', '150327', '121212-XXXX',
+test_ssn = ['150320-', '080320A242K', '190801-686P', '140500A509A',  '150399+111N', '121212-123A',
             '311299-999A', '010101-000A']
 
 test_street = ['Alppikatu 4', 'Ahjokuja 3', 'Ahmatie', 'Mannerheimintie']

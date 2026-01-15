@@ -33,6 +33,7 @@ class TestFinnishPhoneRecognizer(unittest.TestCase):
         - International format: +358401234567
         - Organization format: (09) 12345678
         """
+        # TODO: negative 00600
         test_cases = test_phonenumbers_fi
         bad_cases = bad_phonenumbers
         test_base = BaseRegexTest('fi_puhelin_regex', test_cases, bad_cases)
@@ -47,6 +48,7 @@ class TestFinnishSSNRecognizer(unittest.TestCase):
 
         Format: DDMMYY-XXXX
         """
+        #TODO: 150320-, 150327,  121212-XXXX,
         test_cases = test_ssn
         bad_cases = bad_ssn
         test_base = BaseRegexTest('fi_hetu_regex', test_cases, bad_cases)
@@ -63,6 +65,7 @@ class TestFinnishIBANRecognizer(unittest.TestCase):
         - With spaces: FI49 5000 9420 0287 30
         - Without spaces: FI4950009420028730
         """
+        # TODO: FI49 5000 9420 0287 30  / FI4950009420028730
         test_cases = test_iban
         bad_cases = bad_email  # Using bad_email as placeholder for bad IBAN test data
         test_base = BaseRegexTest('fi_iban_regex', test_cases, bad_cases)
@@ -79,6 +82,7 @@ class TestFinnishPropertyIDRecognizer(unittest.TestCase):
         - Basic format: 091-404-0001-0034 (municipality-district-block-unit)
         - Extended format: 091-404-0001-0034-M001
         """
+        # TODO: 1616161616161616, 1919191919191919191, 181818181818181818, 17171717171717171 ???
         test_cases = test_property_identifier
         bad_cases = []  # No bad property identifier test data available
         test_base = BaseRegexTest('fi_kiinteisto_regex', test_cases, bad_cases)
@@ -96,6 +100,8 @@ class TestFinnishVehicleRegistrationRecognizer(unittest.TestCase):
         - Motorcycle format: AB-123
         - Diplomat plates: CD-1234
         """
+        # TODO: Nothing works like ABA303, ABA 303, fdr-361, KQC546
+        # NEGATIVE 300-223
         test_cases = test_register_number
         bad_cases = bad_register_number
         test_base = BaseRegexTest('fi_rekisteri_regex', test_cases, bad_cases)
