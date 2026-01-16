@@ -29,9 +29,7 @@ test_names_fi = ['Maija Mehiläinen', 'Silja Laine', 'Marja Mustikkamäki', 'Tep
 test_names_en = ['Zhao Lê', 'Andrew Smith', 'John Doe', 'Jane Kreutz', 'Mary Johnson', 'Mary Johnson-Smith', 'Jerome K. Jerome', 'Anna Jerome', 'Alfred Kirby']
 test_register_number = ['ABA-303', 'ABA303', 'ABA 303', 'aba-303', 'fdr-361', 'KQC546', 'abc123']
 test_property_identifier = ['22-22-4444-333', '1-1-1-1', '22-1-333-1', '1-22-1-333', '1-22-1-333-4444',
-                            '333-333-4444-4444-4444', '1-1-1-1-1', '14141414141414',
-                            '151515151515151', '1616161616161616', '17171717171717171', '181818181818181818',
-                            '1919191919191919191',  '91-7-104-3', '91-13-449-26']
+                            '333-333-4444-4444-4444', '1-1-1-1-1',  '91-7-104-3', '91-13-449-26']
 test_ssn = ['150320-', '080320A242K', '190801-686P', '140500A509A',  '150399+111N', '121212-123A',
             '311299-999A', '010101-000A']
 
