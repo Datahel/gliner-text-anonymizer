@@ -6,7 +6,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from text_anonymizer import TextAnonymizer
-from text_anonymizer.models.api_models import AnonymizerApiRequest, AnonymizerApiResponse
+from text_anonymizer.api_models import AnonymizerApiRequest, AnonymizerApiResponse
 from text_anonymizer.config_watcher import ConfigWatcher
 from text_anonymizer.config_cache import ConfigCache
 
@@ -39,9 +39,7 @@ def anonymize(request_data: AnonymizerApiRequest) -> AnonymizerApiResponse:
     anonymizer_result = text_anonymizer.anonymize(
         request_data.text,
         labels=request_data.labels,
-        user_languages=request_data.languages,
-        user_recognizers=request_data.recognizers,  # Backward compatibility
-        profile=request_data.profile,
+        profile=request_data.profile or 'default',
         gliner_threshold=request_data.gliner_threshold,
     )
 
@@ -58,9 +56,7 @@ def anonymize_batch(request_data: List[AnonymizerApiRequest]) -> List[Anonymizer
         anonymizer_result = text_anonymizer.anonymize(
             request.text,
             labels=request.labels,
-            user_languages=request.languages,
-            user_recognizers=request.recognizers,  # Backward compatibility
-            profile=request.profile,
+            profile=request.profile or 'default',
             gliner_threshold=request.gliner_threshold,
         )
 

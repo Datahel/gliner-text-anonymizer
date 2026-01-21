@@ -3,6 +3,7 @@ Lightweight GLiNER-based text anonymizer with profile support.
 """
 import sys
 import re
+import time
 from typing import Optional, List, Dict, Any, Set
 
 try:
@@ -32,7 +33,12 @@ train ticket number, passport expiration date, and social_security_number.
 '''
 
 class Anonymizer(AnonymizerInterface):
-    """Lightweight GLiNER-based anonymizer with text file configuration support."""
+    """Lightweight GLiNER-based anonymizer with text file configuration support.
+
+    Thread Safety:
+        This class is thread-safe. All shared state is immutable after initialization,
+        and entity detection results are returned directly rather than stored in instance state.
+    """
 
     def __init__(self, languages: Optional[List[str]] = None,
             recognizer_configuration: Optional[List[Dict[str, Any]]] = None,
@@ -59,7 +65,6 @@ class Anonymizer(AnonymizerInterface):
             "iban_regex",
             "tiedosto_regex"
         ]
-        self._last_entities = []
         self.config_cache = ConfigCache()
 
         # Load label mappings from config file
@@ -78,11 +83,76 @@ class Anonymizer(AnonymizerInterface):
                 print("Model not found in cache. Downloading GLiNER model...")
             return GLiNER.from_pretrained(self.model_name)
 
+    # GLiNER has a token limit of 384, we use conservative char limit
+    # Average ~4 chars per token, so 350 tokens * 4 = 1400 chars with safety margin
+    GLINER_MAX_CHARS = 1200
+    GLINER_OVERLAP_CHARS = 100  # Overlap to avoid splitting entities at boundaries
+
+    def _split_text_into_chunks(self, text: str) -> List[tuple]:
+        """
+        Split text into chunks that fit within GLiNER's token limit.
+
+        Uses sentence boundaries when possible to avoid splitting entities.
+        Returns list of (chunk_text, start_offset) tuples.
+        """
+        if len(text) <= self.GLINER_MAX_CHARS:
+            return [(text, 0)]
+
+        chunks = []
+        current_pos = 0
+
+        while current_pos < len(text):
+            # Calculate end position for this chunk
+            end_pos = min(current_pos + self.GLINER_MAX_CHARS, len(text))
+
+            # If not at the end, try to find a good break point
+            if end_pos < len(text):
+                # Look for sentence boundaries (. ! ? followed by space or newline)
+                chunk_text = text[current_pos:end_pos]
+
+                # Search backwards for a sentence boundary
+                best_break = -1
+                for i in range(len(chunk_text) - 1, max(0, len(chunk_text) - 300), -1):
+                    if chunk_text[i] in '.!?\n' and (i + 1 >= len(chunk_text) or chunk_text[i + 1] in ' \n\t'):
+                        best_break = i + 1
+                        break
+
+                # If no sentence boundary found, try to break at whitespace
+                if best_break == -1:
+                    for i in range(len(chunk_text) - 1, max(0, len(chunk_text) - 100), -1):
+                        if chunk_text[i] in ' \n\t':
+                            best_break = i + 1
+                            break
+
+                # If still no good break point, just use the max position
+                if best_break > 0:
+                    end_pos = current_pos + best_break
+
+            chunk_text = text[current_pos:end_pos]
+            chunks.append((chunk_text, current_pos))
+
+            # Move to next chunk with overlap (but not past the current end)
+            next_pos = end_pos - self.GLINER_OVERLAP_CHARS
+            if next_pos <= current_pos:
+                next_pos = end_pos  # Avoid infinite loop
+            current_pos = next_pos
+
+            # If we've passed the end, stop
+            if current_pos >= len(text):
+                break
+
+        if self.debug_mode:
+            print(f"[CHUNKING] Split text ({len(text)} chars) into {len(chunks)} chunks")
+
+        return chunks
 
     def _find_entities_with_gliner(self, text: str, threshold: float = 0.3,
                                    custom_labels: Optional[List[str]] = None) -> List[Dict]:
         """
         Use GLiNER to find entities in text.
+
+        Automatically chunks long texts to avoid GLiNER's 384 token limit.
+        Entities from overlapping regions are deduplicated.
 
         Args:
             text: Text to analyze
@@ -90,7 +160,43 @@ class Anonymizer(AnonymizerInterface):
             custom_labels: Custom labels to use instead of default
         """
         labels = custom_labels if custom_labels is not None else self.labels
-        return self.model.predict_entities(text, labels, threshold=threshold)
+
+        # Split text into chunks if needed
+        chunks = self._split_text_into_chunks(text)
+
+        if len(chunks) == 1:
+            # No chunking needed, process directly
+            return self.model.predict_entities(text, labels, threshold=threshold)
+
+        # Process each chunk and collect entities with adjusted positions
+        all_entities = []
+        seen_spans = set()  # Track (start, end, label) to deduplicate overlaps
+
+        for chunk_text, offset in chunks:
+            chunk_entities = self.model.predict_entities(chunk_text, labels, threshold=threshold)
+
+            for entity in chunk_entities:
+                # Adjust positions to original text coordinates
+                adjusted_start = entity['start'] + offset
+                adjusted_end = entity['end'] + offset
+
+                # Create a unique key for deduplication
+                span_key = (adjusted_start, adjusted_end, entity['label'])
+
+                if span_key not in seen_spans:
+                    seen_spans.add(span_key)
+                    all_entities.append({
+                        'start': adjusted_start,
+                        'end': adjusted_end,
+                        'text': entity.get('text', text[adjusted_start:adjusted_end]),
+                        'label': entity['label'],
+                        'score': entity.get('score', 0.5)
+                    })
+
+        if self.debug_mode:
+            print(f"[CHUNKING] Found {len(all_entities)} entities across {len(chunks)} chunks")
+
+        return all_entities
 
     def _find_entities_with_regex(self, text: str, patterns: List[Dict[str, str]],
                                   allowed_types: Optional[Set[str]] = None) -> List[Dict]:
@@ -242,25 +348,28 @@ class Anonymizer(AnonymizerInterface):
         # Return None for regex_types if empty (means don't use regex patterns)
         return gliner_labels, set(regex_types) if regex_types else None
 
-    def anonymize_text(self, text: str, profile: str = 'default',
-                      labels: Optional[List[str]] = None,
-                      gliner_threshold: float = 0.3) -> str:
+    def _anonymize_core(self, text: str, profile: str = 'default',
+                        labels: Optional[List[str]] = None,
+                        gliner_threshold: float = 0.3) -> tuple[str, List[Dict]]:
         """
-        Anonymize text using GLiNER and optional profile configuration.
+        Core anonymization logic returning both anonymized text and detected entities.
+
+        This is an internal method that performs the actual anonymization work.
+        Use anonymize() or anonymize_text() for public API.
 
         Args:
             text: Text to anonymize
-            profile: Profile name for configuration (defaults to 'default' if None)
-            labels: List of entity labels to detect with suffixes:
-                   - '_ner' for NER/GLiNER labels (e.g., 'person_ner', 'email_ner')
-                   - '_regex' for regex patterns (e.g., 'fi_hetu_regex', 'fi_puhelin_regex')
-                   - 'blocklist' to enable blocklist matching
-                   - Unsuffixed labels are treated as NER labels for backward compatibility
-                   If None, uses profile labels or defaults
-            gliner_threshold: GLiNER confidence threshold (0.0-1.0, default 0.3)
+            profile: Profile name for configuration (defaults to 'default')
+            labels: List of entity labels to detect with suffixes
+            gliner_threshold: GLiNER confidence threshold (0.0-1.0)
+
+        Returns:
+            Tuple of (anonymized_text, entities_list)
         """
+        total_start = time.perf_counter() if self.debug_mode else None
+
         if not text:
-            return text
+            return text, []
 
         # Use 'default' profile if none specified to ensure regex patterns are applied
         effective_profile = profile if profile else 'default'
@@ -282,8 +391,14 @@ class Anonymizer(AnonymizerInterface):
         # Collect entities from GLiNER (only if there are GLiNER labels)
         entities = []
         if gliner_labels:
+            t0 = time.perf_counter() if self.debug_mode else None
             entities = self._find_entities_with_gliner(text, threshold=gliner_threshold,
                                                        custom_labels=gliner_labels)
+            if self.debug_mode:
+                elapsed = time.perf_counter() - t0
+                print(f"[TIMING] GLiNER prediction: {elapsed:.3f}s")
+                if elapsed > 0.5:
+                    print(f"[TIMING] WARNING: GLiNER prediction slow (>{0.5}s)")
 
         # Always load regex patterns from effective_profile (defaults to 'default')
         # Always load blocklist/grantlist when an explicit profile is provided
@@ -298,19 +413,27 @@ class Anonymizer(AnonymizerInterface):
 
         # Add blocklist entities
         if blocklist:
+            t0 = time.perf_counter() if self.debug_mode else None
             blocklist_entities = self._find_blocklist_entities(text, blocklist)
             entities.extend(blocklist_entities)
+            if self.debug_mode:
+                elapsed = time.perf_counter() - t0
+                print(f"[TIMING] Blocklist matching: {elapsed:.3f}s")
 
         # Add regex pattern entities from the profile
         # If the caller requested specific regex types (via labels), only apply those.
         # Otherwise (no specific regex labels requested) apply all profile regex patterns.
         if regex_patterns:
+            t0 = time.perf_counter() if self.debug_mode else None
             if regex_entity_types is None:
                 # No specific regex types requested -> apply all patterns from profile
                 entities.extend(self._find_entities_with_regex(text, regex_patterns))
             else:
                 # Apply only requested regex entity types
                 entities.extend(self._find_entities_with_regex(text, regex_patterns, allowed_types=regex_entity_types))
+            if self.debug_mode:
+                elapsed = time.perf_counter() - t0
+                print(f"[TIMING] Regex patterns: {elapsed:.3f}s")
 
         # Filter out grantlisted entities
         if grantlist:
@@ -318,29 +441,61 @@ class Anonymizer(AnonymizerInterface):
 
         # Remove overlapping entities
         entities = self._remove_overlapping_entities(entities)
-        self._last_entities = entities
 
         if not entities:
-            return text
+            if self.debug_mode:
+                total_elapsed = time.perf_counter() - total_start
+                print(f"[TIMING] Total _anonymize_core: {total_elapsed:.3f}s (no entities found)")
+            return text, []
 
         # Replace entities in reverse order to maintain positions
+        t0 = time.perf_counter() if self.debug_mode else None
         result = text
         for entity in sorted(entities, key=lambda x: x['start'], reverse=True):
             start, end = entity['start'], entity['end']
             label = self._map_entity_label(entity['label'])
             result = result[:start] + f"<{label}>" + result[end:]
+        if self.debug_mode:
+            elapsed = time.perf_counter() - t0
+            print(f"[TIMING] Entity replacement: {elapsed:.3f}s")
 
-        return result
+        if self.debug_mode:
+            total_elapsed = time.perf_counter() - total_start
+            print(f"[TIMING] Total _anonymize_core: {total_elapsed:.3f}s ({len(entities)} entities)")
+            if total_elapsed > 1.0:
+                print(f"[TIMING] WARNING: Total processing slow (>1.0s)")
+
+        return result, entities
+
+    def anonymize_text(self, text: str, profile: str = 'default',
+                      labels: Optional[List[str]] = None,
+                      gliner_threshold: float = 0.3) -> str:
+        """
+        Anonymize text and return only the anonymized string.
+
+        Args:
+            text: Text to anonymize
+            profile: Profile name for configuration (defaults to 'default')
+            labels: List of entity labels to detect with suffixes:
+                   - '_ner' for NER/GLiNER labels (e.g., 'person_ner', 'email_ner')
+                   - '_regex' for regex patterns (e.g., 'fi_hetu_regex', 'fi_puhelin_regex')
+                   - 'blocklist' to enable blocklist matching
+                   - Unsuffixed labels are treated as NER labels for backward compatibility
+                   If None, uses profile labels or defaults
+            gliner_threshold: GLiNER confidence threshold (0.0-1.0, default 0.3)
+
+        Returns:
+            Anonymized text with entities replaced by labels
+        """
+        anonymized_text, _ = self._anonymize_core(text, profile, labels, gliner_threshold)
+        return anonymized_text
 
     def anonymize(self, text: str,
                   labels: Optional[List[str]] = None,
-                  user_languages: Optional[List[str]] = None,
-                  user_recognizers: Optional[List[str]] = None,
-                  use_labels: bool = True,
                   profile: str = 'default',
                   gliner_threshold: float = 0.6) -> AnonymizerResult:
         """
-        Anonymize text and return detailed results.
+        Anonymize text and return detailed results including summary statistics.
 
         Args:
             text: Text to anonymize
@@ -350,23 +505,16 @@ class Anonymizer(AnonymizerInterface):
                    - 'blocklist' to enable blocklist matching
                    - Unsuffixed labels treated as NER for backward compatibility
                    Examples: ['person_ner', 'email_ner', 'fi_hetu_regex', 'blocklist']
-            user_languages: Languages to use (deprecated, kept for compatibility)
-            user_recognizers: Deprecated - use 'labels' parameter instead
-            use_labels: Whether to use labels in output (deprecated)
             profile: Profile name for blocklist/grantlist/regex patterns
-            gliner_threshold: GLiNER confidence threshold (0.0-1.0, default 0.3)
+            gliner_threshold: GLiNER confidence threshold (0.0-1.0, default 0.6)
 
         Returns:
-            AnonymizerResult with anonymized text and summary
+            AnonymizerResult with anonymized text, summary counts, and entity details
         """
         if not text:
             return AnonymizerResult(anonymized_text=None, summary={}, details={})
 
-        # Handle backward compatibility: user_recognizers -> labels
-        if user_recognizers is not None and labels is None:
-            labels = user_recognizers
-
-        anonymized_text = self.anonymize_text(
+        anonymized_text, entities = self._anonymize_core(
             text,
             profile=profile,
             labels=labels,
@@ -376,7 +524,7 @@ class Anonymizer(AnonymizerInterface):
         summary = {}
         details = {}
 
-        for entity in self._last_entities:
+        for entity in entities:
             entity_type = self._map_entity_label(entity['label'])
             entity_text = entity.get('text', text[entity['start']:entity['end']])
 

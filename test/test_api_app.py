@@ -14,6 +14,7 @@ import sys
 import os
 import unittest
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -77,10 +78,7 @@ class TestAnonymizerAPI(unittest.TestCase):
     def test_anonymize_simple_text(self):
         """Test basic anonymization endpoint with simple text."""
         payload = {
-            "text": "Puhelinnumeroni on 040-1234567.",
-            "languages": ["fi"],
-            "recognizers": [],
-            "profile": None
+            "text": "Puhelinnumeroni on 040-1234567."
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
         self.assertEqual(response.status_code, 200)
@@ -97,10 +95,7 @@ class TestAnonymizerAPI(unittest.TestCase):
     def test_anonymize_finnish_ssn(self):
         """Test anonymization of Finnish social security number."""
         payload = {
-            "text": "Minun henkilötunnukseni on 311299-999A.",
-            "languages": ["fi"],
-            "recognizers": [],
-            "profile": None
+            "text": "Minun henkilötunnukseni on 311299-999A."
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
         self.assertEqual(response.status_code, 200)
@@ -117,8 +112,6 @@ class TestAnonymizerAPI(unittest.TestCase):
         """Test anonymization with a profile (blocklist/grantlist)."""
         payload = {
             "text": "Tunniste blockword123 on lauseessa.",
-            "languages": ["fi"],
-            "recognizers": [],
             "profile": "example"
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
@@ -143,8 +136,6 @@ class TestAnonymizerAPI(unittest.TestCase):
         """Test that grantlisted items are protected when using profile."""
         payload = {
             "text": "Sallittu kohde on example321 lauseessa.",
-            "languages": ["fi"],
-            "recognizers": [],
             "profile": "example"
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
@@ -160,8 +151,6 @@ class TestAnonymizerAPI(unittest.TestCase):
         """Test profile with both blocklist and grantlist items."""
         payload = {
             "text": "Estetty: blockword123, Sallittu: example321, Puhelin: 040-1234567",
-            "languages": ["fi"],
-            "recognizers": [],
             "profile": "example"
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
@@ -183,10 +172,7 @@ class TestAnonymizerAPI(unittest.TestCase):
     def test_anonymize_without_profile(self):
         """Test that blocklist is not applied when no profile is specified."""
         payload = {
-            "text": "Tunniste blockword123 on lauseessa.",
-            "languages": ["fi"],
-            "recognizers": [],
-            "profile": None
+            "text": "Tunniste blockword123 on lauseessa."
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
         self.assertEqual(response.status_code, 200)
@@ -205,22 +191,14 @@ class TestAnonymizerAPI(unittest.TestCase):
         """Test batch anonymization endpoint."""
         payload = [
             {
-                "text": "Henkilötunnukseni on 311299-999A.",
-                "languages": ["fi"],
-                "recognizers": [],
-                "profile": None
+                "text": "Henkilötunnukseni on 311299-999A."
             },
             {
                 "text": "Tunniste blockword123 on lauseessa.",
-                "languages": ["fi"],
-                "recognizers": [],
                 "profile": "example"
             },
             {
-                "text": "Soita minulle numeroon 040-9876543.",
-                "languages": ["fi"],
-                "recognizers": [],
-                "profile": None
+                "text": "Soita minulle numeroon 040-9876543."
             }
         ]
         response = requests.post(f"{API_URL}/anonymize_batch", json=payload, timeout=API_TIMEOUT)
@@ -250,15 +228,10 @@ class TestAnonymizerAPI(unittest.TestCase):
         """Test batch processing with different profiles."""
         payload = [
             {
-                "text": "Item blockword123 without profile context.",
-                "languages": ["fi"],
-                "recognizers": [],
-                "profile": None
+                "text": "Item blockword123 without profile context."
             },
             {
                 "text": "Item blockword123 with example profile.",
-                "languages": ["fi"],
-                "recognizers": [],
                 "profile": "example"
             }
         ]
@@ -282,10 +255,7 @@ class TestAnonymizerAPI(unittest.TestCase):
     def test_anonymize_empty_text(self):
         """Test handling of empty text."""
         payload = {
-            "text": "",
-            "languages": ["fi"],
-            "recognizers": [],
-            "profile": None
+            "text": ""
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
         self.assertEqual(response.status_code, 200)
@@ -296,43 +266,34 @@ class TestAnonymizerAPI(unittest.TestCase):
                       "Empty text should return None or empty string")
         logger.info("Empty text handled correctly: %s", data["anonymized_txt"])
 
-    def test_anonymize_multiple_languages(self):
-        """Test anonymization with multiple languages."""
+    def test_anonymize_mixed_language_text(self):
+        """Test anonymization of text containing both Finnish and English."""
         payload = {
-            "text": "Hei, olen Matti. Hello, I am John.",
-            "languages": ["fi", "en"],
-            "recognizers": [],
-            "profile": None
+            "text": "Hei, olen Matti. Hello, I am John."
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
         self.assertEqual(response.status_code, 200)
 
         data = response.json()
         self.assertIn("anonymized_txt", data)
-        logger.info("Multi-language anonymization: %s", data["anonymized_txt"])
+        logger.info("Mixed language text anonymization: %s", data["anonymized_txt"])
 
-    def test_anonymize_default_languages(self):
-        """Test that default language is Finnish if not specified."""
+    def test_anonymize_minimal_payload(self):
+        """Test anonymization with minimal payload (only text and profile)."""
         payload = {
-            "text": "Soita numeroon 040-1234567.",
-            # languages not specified, should default to ['fi']
-            "recognizers": [],
-            "profile": None
+            "text": "Soita numeroon 040-1234567."
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
         self.assertEqual(response.status_code, 200)
 
         data = response.json()
         self.assertNotIn("040-1234567", data["anonymized_txt"])
-        logger.info("Default language (Finnish) working correctly")
+        logger.info("Minimal payload anonymization working correctly")
 
     def test_anonymize_summary_structure(self):
         """Test that summary are returned in correct format with expected entities."""
         payload = {
-            "text": "Contact: 040-1234567, SSN: 311299-999A",
-            "languages": ["fi"],
-            "recognizers": [],
-            "profile": None
+            "text": "Contact: 040-1234567, SSN: 311299-999A"
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
         self.assertEqual(response.status_code, 200)
@@ -367,8 +328,6 @@ class TestAnonymizerAPI(unittest.TestCase):
         """Test that nonexistent profile is handled gracefully without custom recognizers."""
         payload = {
             "text": "Tunniste blockword123 on lauseessa.",
-            "languages": ["fi"],
-            "recognizers": [],
             "profile": "nonexistent_profile_xyz"
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
@@ -408,8 +367,6 @@ class TestAnonymizerAPI(unittest.TestCase):
         for test_word, pattern_name in test_cases:
             payload = {
                 "text": f"Tässä lauseessa on {test_word} tunniste.",
-                "languages": ["fi"],
-                "recognizers": [],
                 "profile": "example"
             }
             response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
@@ -444,8 +401,6 @@ class TestAnonymizerAPI(unittest.TestCase):
         for word in non_matching_words:
             payload = {
                 "text": f"Tässä lauseessa on {word} sana.",
-                "languages": ["fi"],
-                "recognizers": [],
                 "profile": "example"
             }
             response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
@@ -473,8 +428,6 @@ class TestAnonymizerAPI(unittest.TestCase):
         for word in test_words:
             payload = {
                 "text": f"Tässä lauseessa on {word} tunniste.",
-                "languages": ["fi"],
-                "recognizers": [],
                 "profile": "nonexistent_profile_xyz"
             }
             response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
@@ -522,10 +475,7 @@ class TestAnonymizerAPIEdgeCases(unittest.TestCase):
         """Test anonymization of longer text with multiple phone numbers."""
         long_text = " ".join([f"This is sentence {i} with phone 040-{i:07d}." for i in range(50)])
         payload = {
-            "text": long_text,
-            "languages": ["fi"],
-            "recognizers": [],
-            "profile": None
+            "text": long_text
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=10.0)
         self.assertEqual(response.status_code, 200)
@@ -549,10 +499,7 @@ class TestAnonymizerAPIEdgeCases(unittest.TestCase):
     def test_anonymize_special_characters(self):
         """Test handling of special characters while anonymizing phone numbers."""
         payload = {
-            "text": "Special chars: @#$%^&*() with phone 040-1234567",
-            "languages": ["fi"],
-            "recognizers": [],
-            "profile": None
+            "text": "Special chars: @#$%^&*() with phone 040-1234567"
         }
         response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=API_TIMEOUT)
         self.assertEqual(response.status_code, 200)
@@ -585,7 +532,187 @@ class TestAnonymizerAPIEdgeCases(unittest.TestCase):
         self.assertEqual(data, [])
         logger.info("Empty batch handled correctly")
 
+    def test_anonymize_long_text_mixed_entities(self):
+        """Test anonymization of long text with street address, phone numbers, and NER entities.
+
+        This test uses a detailed lamp post complaint to test GLiNER throughput with
+        realistic Finnish text containing multiple entity types. All data is fictional.
+        """
+        # Fictional lamp post complaint with unnecessarily detailed information
+        # All names, addresses, phone numbers, and identifiers are completely made up
+        long_text = """
+        Valaistusvikoilmoitus - Rikkinäinen katuvalaisin Helsingissä
+
+        Hyvä Helsingin kaupungin katuvalaistusyksikkö,
+
+        Kirjoitan teille ilmoittaakseni rikkinäisestä katuvalaisimesta, jonka havaitsin
+        eilen illalla kävellessäni koirani Nappulan kanssa tavanomaisella iltakävelyllämme.
+        Nimeni on Erkki Esimerkkinen ja olen asunut tällä alueella jo 23 vuotta, joten tunnen
+        kadut ja valaistuksen erittäin hyvin.
+
+        Rikkinäinen valaisin sijaitsee osoitteessa Testaajankatu 42, 00100 Helsinki,
+        aivan Kuvitteellisen kauppakeskuksen läheisyydessä. Tarkemmin sanottuna valaisin on
+        kadun itäpuolella, noin 15 metriä Esimerkkikadun risteyksestä pohjoiseen.
+        Pylvään numero on mielestäni 9999-X, mikäli luin sen oikein taskulampun valossa.
+
+        Vian kuvaus yksityiskohtaisesti: Valaisin vilkkuu epäsäännöllisesti noin 3-7
+        sekunnin välein. Välillä se sammuu kokonaan 10-15 sekunniksi ja syttyy sitten
+        takaisin kirkkaana. Tämä vilkkuminen alkoi noin viikko sitten, maanantaina
+        6. maaliskuuta 2024. Aluksi luulin sen johtuvan pakkasesta, mutta ongelma on
+        jatkunut säästä riippumatta.
+
+        Olen erityisen huolissani turvallisuudesta, koska tällä katuosuudella kulkee
+        paljon jalankulkijoita ja pyöräilijöitä myös iltaisin. Naapurini Maija Meikäläinen
+        osoitteesta Testaajankatu 44 A 12 on myös huomannut ongelman ja valittanut siitä.
+        Hänen puhelinnumeronsa on 040 555 9876, mikäli haluatte lisätietoja.
+
+        Olen ottanut valaisimesta valokuvia, jotka voin toimittaa pyydettäessä. Minut
+        tavoittaa parhaiten puhelimitse numerosta +358 50 555 1234 tai sähköpostitse
+        osoitteesta erkki.esimerkkinen@testipalvelu.fi. Työskentelen Kuvitteellinen Yritys
+        Oy:ssä Helsingin keskustan toimistossa, joten olen tavoitettavissa parhaiten
+        iltaisin klo 17 jälkeen.
+
+        Lisäksi haluaisin mainita, että samassa pylväässä oleva liikennemerkki on hieman
+        kallellaan, mahdollisesti viime talven aurauksesta johtuen. Tämä ei ole kiireellinen
+        asia, mutta ajattelin mainita sen samalla kun olette alueella korjaamassa valaisinta.
+
+        GPS-koordinaatit paikalle ovat suunnilleen 60.1699° N, 24.9384° E, mikäli siitä
+        on apua korjausryhmälle. Lähimmät maamerkit ovat Testiravintola ja Esimerkkikaupan
+        pohjoinen sisäänkäynti.
+
+        Kiitos etukäteen nopeasta reagoinnista. Arvostan suuresti Helsingin kaupungin
+        katuvalaistusyksikön työtä turvallisen ja hyvin valaistun kaupunkiympäristön
+        ylläpitämisessä.
+
+        Kunnioittavasti,
+        Erkki Esimerkkinen
+        Henkilötunnus: 010170-999X
+        Testaajankatu 40 B 23
+        00100 Helsinki
+        Puh: +358 50 555 1234
+        Sähköposti: erkki.esimerkkinen@testipalvelu.fi
+        """
+
+        payload = {
+            "text": long_text
+        }
+        # Use longer timeout for long text processing
+        response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=30.0)
+        self.assertEqual(response.status_code, 200)
+
+        data = response.json()
+        anonymized_text = data["anonymized_txt"]
+
+        # Verify phone numbers are anonymized
+        self.assertNotIn("+358 50 555 1234", anonymized_text)
+        self.assertNotIn("040 555 9876", anonymized_text)
+
+        # Verify email is anonymized
+        self.assertNotIn("erkki.esimerkkinen@testipalvelu.fi", anonymized_text)
+
+        # Verify SSN (henkilötunnus) is anonymized
+        self.assertNotIn("010170-999X", anonymized_text)
+
+        # Verify summary contains detected entities
+        summary = data.get("summary", {})
+        self.assertTrue(summary, "Summary should not be empty for text with multiple entities")
+
+        # Log entity counts for throughput analysis
+        total_entities = sum(summary.values())
+        logger.info("Long text anonymization complete: %d entities detected across %d types",
+                   total_entities, len(summary))
+        logger.info("Entity breakdown: %s", summary)
+
+    def test_parallel_requests_no_mixing(self):
+        """Test that parallel requests are handled correctly without mixing responses.
+
+        Sends 8 parallel requests (2x typical worker count) with unique identifiers
+        and verifies each response contains the correct anonymized version of its unique data.
+        This stress tests the API to ensure request/response isolation under load.
+        """
+        # Each request has a unique identifier and unique phone number
+        # Format: (request_id, unique_phone, unique_email)
+        # Using 8 requests to exceed typical 4-worker configuration
+        test_cases = [
+            ("PYYNTO_ALFA_001", "050 111 1111", "alfa@testi1.fi"),
+            ("PYYNTO_BETA_002", "050 222 2222", "beta@testi2.fi"),
+            ("PYYNTO_GAMMA_003", "050 333 3333", "gamma@testi3.fi"),
+            ("PYYNTO_DELTA_004", "050 444 4444", "delta@testi4.fi"),
+            ("PYYNTO_EPSILON_005", "050 555 5555", "epsilon@testi5.fi"),
+            ("PYYNTO_ZETA_006", "050 666 6666", "zeta@testi6.fi"),
+            ("PYYNTO_ETA_007", "050 777 7777", "eta@testi7.fi"),
+            ("PYYNTO_THETA_008", "050 888 8888", "theta@testi8.fi"),
+        ]
+
+        def make_request(request_id: str, phone: str, email: str) -> dict:
+            """Make a single anonymization request and return result with metadata."""
+            text = f"""
+            Palaute tunnuksella {request_id}
+
+            Hyvä vastaanottaja,
+
+            Tämä on testipalaute jonka tunniste on {request_id}. Lähettäjän
+            yhteystiedot ovat: puhelinnumero {phone} ja sähköposti {email}.
+
+            Tämä teksti on tarkoituksella pitkä jotta GLiNER-malli ehtii
+            prosessoida sitä hetken aikaa, mikä mahdollistaa rinnakkaisten
+            pyyntöjen testaamisen. Teksti sisältää kuvitteellisia tietoja
+            kuten henkilötunnus 010180-999X ja osoite Testikatu 99, 00100 Helsinki.
+
+            Ystävällisin terveisin,
+            Testaaja {request_id}
+            """
+
+            payload = {
+                "text": text
+            }
+
+            response = requests.post(f"{API_URL}/anonymize", json=payload, timeout=30.0)
+            return {
+                "request_id": request_id,
+                "phone": phone,
+                "email": email,
+                "status_code": response.status_code,
+                "response": response.json() if response.status_code == 200 else None
+            }
+
+        # Send all 8 requests in parallel
+        results = []
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {
+                executor.submit(make_request, req_id, phone, email): req_id
+                for req_id, phone, email in test_cases
+            }
+
+            for future in as_completed(futures):
+                results.append(future.result())
+
+        # Verify all requests succeeded
+        self.assertEqual(len(results), 8, "All 8 parallel requests should complete")
+
+        for result in results:
+            self.assertEqual(result["status_code"], 200,
+                           f"Request {result['request_id']} should succeed")
+
+            anonymized_text = result["response"]["anonymized_txt"]
+            request_id = result["request_id"]
+            phone = result["phone"]
+            email = result["email"]
+
+            # Verify phone and email are anonymized
+            self.assertNotIn(phone, anonymized_text,
+                           f"Phone {phone} should be anonymized in {request_id}")
+            self.assertNotIn(email, anonymized_text,
+                           f"Email {email} should be anonymized in {request_id}")
+
+            # Verify other requests' data is NOT in this response (no mixing)
+            for other_id, other_phone, other_email in test_cases:
+                if other_id != request_id:
+                    self.assertNotIn(other_id, anonymized_text,
+                                   f"Other request ID {other_id} should not appear in {request_id}")
+
+        logger.info("Parallel requests test passed: 8 concurrent requests processed correctly")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-
