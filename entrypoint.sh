@@ -1,5 +1,13 @@
 #!/bin/bash
 MODE=${MODE:-dev}
+# Number of worker processes (default: 4 for production, adjust based on RAM)
+# Each worker loads ~400MB GLiNER model, so 4 workers ≈ 1.6GB RAM for models
+WORKERS=${WORKERS:-4}
+
+# Suppress harmless warnings from ONNX Runtime and Transformers
+export ONNXRUNTIME_DISABLE_CPUID_CHECK=1
+export TOKENIZERS_PARALLELISM=false
+export TRANSFORMERS_VERBOSITY=error
 
 # Helper: ensure a command exists, else fail fast with a clear message
 require_cmd() {
@@ -11,38 +19,35 @@ require_cmd() {
     fi
 }
 
+# Verify GLiNER is available (required for all modes)
+python -c "import gliner" 2>/dev/null || {
+    echo "GLiNER not available. Rebuild the image to install requirements." >&2
+    exit 1
+}
+
 if [[ $MODE = dev ]]
 then
     echo "Run container in dev mode"
     tail -f /dev/null
 elif [[ $MODE = api ]]
 then
-    echo "Run container in api mode"
+    echo "Run container in api mode with $WORKERS workers"
     require_cmd uvicorn
-    python -c "import presidio_analyzer, spacy" 2>/dev/null || {
-        echo "Required Python modules not available. Rebuild the image to install requirements." >&2
-        exit 1
-    }
-    # Target actual FastAPI app object defined in anonymizer_api_app.py
-    uvicorn anonymizer_api_app:anonymizer_api --host 0.0.0.0 --port 8000
+    uvicorn anonymizer_api_app:anonymizer_api --host 0.0.0.0 --port 8000 --workers $WORKERS
 elif [[ $MODE = web ]]
 then
-    echo "Run container in web mode"
+    echo "Run container in web mode with $WORKERS workers"
     require_cmd gunicorn
     python -c "import flask" 2>/dev/null || {
         echo "Flask not available. Rebuild the image to install requirements." >&2
         exit 1
     }
-    gunicorn -w 4 -b 0.0.0.0:8000 --timeout 600 anonymizer_flask_app:app
+    gunicorn -w $WORKERS -b 0.0.0.0:8000 --timeout 600 anonymizer_flask_app:app
 elif [[ $MODE = webapi ]]
 then
-    echo "Run container in web/api mode"
+    echo "Run container in web/api mode with $WORKERS workers"
     require_cmd uvicorn
-    python -c "import presidio_analyzer, spacy" 2>/dev/null || {
-        echo "Required Python modules not available. Rebuild the image to install requirements." >&2
-        exit 1
-    }
-    uvicorn anonymizer_api_webapp:main_app --host 0.0.0.0 --port 8000
+    uvicorn anonymizer_api_webapp:main_app --host 0.0.0.0 --port 8000 --workers $WORKERS
 
 else
     echo "unknown mode: "$MODE", use 'dev', 'api', 'web', 'webapi' or leave empty (defaults to 'dev')"

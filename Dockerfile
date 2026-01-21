@@ -17,7 +17,6 @@ RUN python3 -m venv ${VIRTUAL_ENV}
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 # Setup project directory
-RUN echo "Setup project dir"
 RUN mkdir -p /app
 WORKDIR /app
 
@@ -34,10 +33,12 @@ RUN python -m pip install -U pip setuptools wheel pip-tools && \
 RUN python -m pip install -r /app/requirements.txt && \
     python -m pip install -r /app/requirements-server.txt
 
+# Pre-download GLiNER model during build to bake into image
+RUN python -c "from gliner import GLiNER; GLiNER.from_pretrained('urchade/gliner_multi-v2.1')"
+
 # Copy application source after dependency installation for better caching
-COPY ./train_custom_spacy_model/ /app/train_custom_spacy_model/
-COPY ./custom_spacy_model/ /app/custom_spacy_model/
 COPY ./text_anonymizer/ /app/text_anonymizer/
+COPY ./config/ /app/config/
 COPY ./examples/ /app/examples
 COPY ./*.py /app/
 COPY ./entrypoint.sh /app/
@@ -46,20 +47,6 @@ COPY ./flask/ /app/flask
 # Install the package in editable mode after deps are installed
 RUN python -m pip install -e /app/
 
-# Trigger tldextract public suffix list download in build phase
-RUN python -c "import tldextract; tldextract.extract('example.com')"
-
-# Include test data (used by entrypoint/tests)
-COPY /test/data/ /app/test/data/
-
-# Ensure train script is executable (if used later by entrypoint)
-RUN chmod +x /app/train_custom_spacy_model/docker_train_custom_spacy_model.sh
-
-# Install custom spaCy model (editable) after base package
-RUN (cd /app ; python -m pip install -e custom_spacy_model/)
-
-# Disable statistics
-ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
 # Determine container mode in entrypoint
 ENTRYPOINT ["/bin/bash", "./entrypoint.sh"]
