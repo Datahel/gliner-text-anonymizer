@@ -2,18 +2,26 @@ from flask import Flask, render_template, request, session, send_file
 from flask_session import Session
 import pandas as pd
 from text_anonymizer import TextAnonymizer
-from text_anonymizer.default_settings import DEFAULT_SETTINGS
+from text_anonymizer.config_cache import ConfigCache
 from werkzeug.utils import secure_filename
 import io
 import os
 import logging
+import secrets
 
 logging.getLogger().setLevel(logging.WARN)
 
 app = Flask(__name__, template_folder='flask/templates', static_folder='flask/static')
 app.logger.setLevel(logging.INFO)
 
-app.secret_key = os.getenv("SECRET_KEY", "@I{&33dy647GyIwP74qzq6(j0'CXX1o{")
+if not os.getenv("SECRET_KEY"):
+    secret_key = secrets.token_hex(32)
+    app.logger.warning(f"No SECRET_KEY set. Generated temporary key: {secret_key}")
+    app.logger.warning("Set this as an environment variable for consistency across restarts.")
+    app.secret_key = secret_key
+else:
+    app.secret_key = os.getenv("SECRET_KEY")
+
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config["SESSION_PERMANENT"] = False
 Session(app)
@@ -24,13 +32,57 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Max upload size, here set
 # Ensure the upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-LANGUAGES = ['fi', 'en']
-
 # Init anonymizer as singleton
-text_anonymizer = TextAnonymizer(languages=LANGUAGES, debug_mode=False)
+text_anonymizer = TextAnonymizer(languages=['fi', 'en'], debug_mode=False)
 
-# User recognizers
-recognizer_options = list(DEFAULT_SETTINGS.mask_mapppings.keys())
+# Load label mappings from config first
+config_cache = ConfigCache.instance()
+label_mappings = config_cache.get_label_mappings()
+
+
+def get_label_display_name(label: str) -> str:
+    """
+    Get display name for a label using label_mappings.
+
+    Examples:
+        'person_ner' -> removes '_ner', converts to 'PERSON' -> maps to 'NIMI'
+        'fi_hetu_regex' -> removes '_regex', converts to 'FI_HETU' -> maps to 'HETU'
+    """
+    if label.endswith('_ner'):
+        # NER label: remove suffix and convert to uppercase
+        key = label[:-4].upper()
+    elif label.endswith('_regex'):
+        # Regex label: remove suffix and convert to uppercase
+        key = label[:-6].upper()
+    else:
+        # Fallback
+        key = label.upper()
+
+    # Look up in mappings, fallback to key itself
+    return label_mappings.get(key, key)
+
+
+# Available labels for the UI (grouped by type) - now with display names
+NER_LABELS = [
+    ('person_ner', get_label_display_name('person_ner')),
+    ('email_ner', get_label_display_name('email_ner')),
+    ('phone_number_ner', get_label_display_name('phone_number_ner')),
+    ('address_ner', get_label_display_name('address_ner')),
+    ('organization_ner', get_label_display_name('organization_ner')),
+    ('location_ner', get_label_display_name('location_ner')),
+]
+
+REGEX_LABELS = [
+    ('fi_hetu_regex', get_label_display_name('fi_hetu_regex')),
+    ('fi_puhelin_regex', get_label_display_name('fi_puhelin_regex')),
+    ('fi_rekisteri_regex', get_label_display_name('fi_rekisteri_regex')),
+    ('fi_iban_regex', get_label_display_name('fi_iban_regex')),
+]
+
+ALL_LABELS = NER_LABELS + REGEX_LABELS
+
+# Default threshold
+DEFAULT_THRESHOLD = 0.6
 
 
 @app.route("/", methods=["GET"])
@@ -43,14 +95,20 @@ def plain_text():
     if request.method == "POST":
         return handle_text_anonymization(request)
     else:
-        return render_template("plain_text.html", languages=LANGUAGES, recognizer_options=recognizer_options)
+        return render_template("plain_text.html",
+                               ner_labels=NER_LABELS,
+                               regex_labels=REGEX_LABELS,
+                               default_threshold=DEFAULT_THRESHOLD)
 
 @app.route("/text_file", methods=["GET", "POST"])
 def text_file():
     if request.method == "POST":
         if "file" in request.files:
             return handle_text_file_anonymization(request)
-    return render_template("text_file.html", languages=LANGUAGES, recognizer_options=recognizer_options)
+    return render_template("text_file.html",
+                           ner_labels=NER_LABELS,
+                           regex_labels=REGEX_LABELS,
+                           default_threshold=DEFAULT_THRESHOLD)
 
 @app.route("/csv", methods=["GET", "POST"])
 def csv():
@@ -60,7 +118,11 @@ def csv():
         else:
             return handle_csv_anonymization(request)
     else:
-        return render_template("csv.html", recognizer_options=recognizer_options, phase="upload")
+        return render_template("csv.html",
+                               ner_labels=NER_LABELS,
+                               regex_labels=REGEX_LABELS,
+                               default_threshold=DEFAULT_THRESHOLD,
+                               phase="upload")
 
 def handle_csv_upload(request):
     
@@ -87,8 +149,9 @@ def handle_csv_upload(request):
 
             return render_template('csv.html',
                                    columns=columns,
-                                   languages=LANGUAGES,
-                                   recognizer_options=recognizer_options,
+                                   ner_labels=NER_LABELS,
+                                   regex_labels=REGEX_LABELS,
+                                   default_threshold=DEFAULT_THRESHOLD,
                                    phase="column_selection")
         except Exception as e:
             app.logger.exception('Csv upload failed: %s', str(e))
@@ -115,7 +178,9 @@ def handle_csv_anonymization(request):
             return render_template('csv.html',
                                    columns=columns,
                                    error="Valitse sarakkeet, jotka haluat anonymisoida.",
-                                   recognizer_options=recognizer_options,
+                                   ner_labels=NER_LABELS,
+                                   regex_labels=REGEX_LABELS,
+                                   default_threshold=DEFAULT_THRESHOLD,
                                    phase="column_selection")
         else:
             # Return an error message or redirect if there is no dataframe in the session
@@ -127,17 +192,32 @@ def handle_csv_anonymization(request):
         if 'dataframe' in session:
             app.logger.info("Dataframe found in session. Anonymizing...")
             try:
-                recognizers = request.form.getlist('recognizers')
+                # Get labels from form (new API)
+                labels = request.form.getlist('labels')
+                if not labels:
+                    labels = None  # Use defaults
+
+                # Get threshold
+                try:
+                    gliner_threshold = float(request.form.get('gliner_threshold', DEFAULT_THRESHOLD))
+                except (ValueError, TypeError):
+                    gliner_threshold = DEFAULT_THRESHOLD
+
                 dataframe_json = session['dataframe']
                 dataframe = pd.read_json(io.StringIO(dataframe_json), orient='split')
                 encoding = request.form.get('encoding', 'utf-8')
-                user_languages = request.form.getlist('user_languages')
-                app.logger.info(f"Got dataframe in json format, encoding is {encoding}, user_languages: {user_languages}")
-                # If columns selected, anonymize them
+
+                app.logger.info(f"CSV anonymization: labels={labels}, threshold={gliner_threshold}")
+
+                # Anonymize selected columns
                 for column in column_selection:
-                    app.logger.info(f"Anonymizing column {column[0:1]}", )
+                    app.logger.info(f"Anonymizing column {column}")
                     dataframe[column] = dataframe[column].apply(
-                        lambda x: text_anonymizer.anonymize(x, user_recognizers=recognizers, user_languages=user_languages).anonymized_text
+                        lambda x: text_anonymizer.anonymize(
+                            x,
+                            labels=labels,
+                            gliner_threshold=gliner_threshold
+                        ).anonymized_text
                     )
 
                 resp = io.StringIO()
@@ -171,15 +251,30 @@ def handle_text_file_anonymization(request):
             try:
                 encoding = request.form.get('encoding', 'utf-8')
                 input_text = uploaded_file.stream.read().decode(encoding)
-                recognizers = request.form.getlist('recognizers')
-                user_languages = request.form.getlist('user_languages')
-                anonymized_str = text_anonymizer.anonymize(input_text, user_recognizers=recognizers,
-                                                           user_languages=user_languages).anonymized_text
-                # add _anonymized to original filename
 
+                # Get labels from form (new API)
+                labels = request.form.getlist('labels')
+                if not labels:
+                    labels = None  # Use defaults
+
+                # Get threshold
+                try:
+                    gliner_threshold = float(request.form.get('gliner_threshold', DEFAULT_THRESHOLD))
+                except (ValueError, TypeError):
+                    gliner_threshold = DEFAULT_THRESHOLD
+
+                app.logger.info(f"Text file anonymization: labels={labels}, threshold={gliner_threshold}")
+
+                anonymized_str = text_anonymizer.anonymize(
+                    input_text,
+                    labels=labels,
+                    gliner_threshold=gliner_threshold
+                ).anonymized_text
+
+                # add _anonymized to original filename
                 filename = secure_filename(uploaded_file.filename)
                 filename = filename.replace('.txt', '_anonymized.txt')
-                app.logger.info(f"Text file uploaded, encoding is {encoding}, user_languages: {user_languages}")
+
                 return send_file(
                     io.BytesIO(anonymized_str.encode(encoding)),
                     mimetype='plain/text',
@@ -190,22 +285,45 @@ def handle_text_file_anonymization(request):
             except Exception as e:
                 app.logger.exception('Error handling txt file: %s', str(e))
                 return render_template("text_file.html",
-                                       languages=LANGUAGES,
-                                       error="Tiedoston anonymisointi ei onnistunut. Tarkista onko merkistö oikein.",
-                                   recognizer_options=recognizer_options)
+                                       ner_labels=NER_LABELS,
+                                       regex_labels=REGEX_LABELS,
+                                       default_threshold=DEFAULT_THRESHOLD,
+                                       error="Tiedoston anonymisointi ei onnistunut. Tarkista onko merkistö oikein.")
 
-    return render_template("text_file.html", recognizer_options=recognizer_options)
+    return render_template("text_file.html",
+                           ner_labels=NER_LABELS,
+                           regex_labels=REGEX_LABELS,
+                           default_threshold=DEFAULT_THRESHOLD)
 
 
 def handle_text_anonymization(request):
     text = request.form['text']
-    recognizers = request.form.getlist('recognizers')
-    user_languages = request.form.getlist('user_languages')
-    app.logger.info(f"Text form uploaded, user_languages: {user_languages}")
-    anonymized_text = text_anonymizer.anonymize(text, user_recognizers=recognizers, user_languages=user_languages).anonymized_text.strip()
-    return render_template("plain_text.html", anonymized_text=anonymized_text,
-                           languages=LANGUAGES,
-                           recognizer_options=recognizer_options, text=text)
+
+    # Get labels from form (new API)
+    labels = request.form.getlist('labels')
+    if not labels:
+        labels = None  # Use defaults
+
+    # Get threshold
+    try:
+        gliner_threshold = float(request.form.get('gliner_threshold', DEFAULT_THRESHOLD))
+    except (ValueError, TypeError):
+        gliner_threshold = DEFAULT_THRESHOLD
+
+    app.logger.info(f"Text anonymization: labels={labels}, threshold={gliner_threshold}")
+
+    anonymized_text = text_anonymizer.anonymize(
+        text,
+        labels=labels,
+        gliner_threshold=gliner_threshold
+    ).anonymized_text.strip()
+
+    return render_template("plain_text.html",
+                           anonymized_text=anonymized_text,
+                           ner_labels=NER_LABELS,
+                           regex_labels=REGEX_LABELS,
+                           default_threshold=DEFAULT_THRESHOLD,
+                           text=text)
 
 
 if __name__ == "__main__":

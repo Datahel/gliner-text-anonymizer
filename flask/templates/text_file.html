@@ -8,7 +8,7 @@
     <div class="hds-container content__container">
 
         <div class="content__main">
-        <!-- CSV Anonymization Form -->
+        <!-- Text File Anonymization Form -->
         <h2 id="anonymize-txt">Tekstitiedoston käsittely</h2>
         {% if error %}
         <p style="color: red;">Virhe: {{ error }}</p>
@@ -30,30 +30,41 @@
             </div>
 
             <div class="hds-text-input">
-                <label for="user_languages" class="hds-text-input__label">Valitse aineiston kieli *:</label>
+                <label class="hds-text-input__label">NER-tunnistimet (GLiNER):</label>
                 <div class="hds-text-input__input-wrapper">
-                    <select id="user_languages" name="user_languages" multiple>
-                        {% for lang in languages %}
-                        {% if lang == 'fi' %}
-                        <option value="{{ lang }}" selected>{{ lang }}</option>
-                        {% else %}
-                        <option value="{{ lang }}">{{ lang }}</option>
-                        {% endif %}
+                    <select id="ner_labels" name="labels" multiple>
+                        {% for label, display_name in ner_labels %}
+                        <option value="{{ label }}" selected>{{ display_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
+                <span class="hds-text-input__helper-text">Henkilönimet, sähköpostit, puhelinnumerot jne.</span>
             </div>
 
             <div class="hds-text-input">
-                <label for="recognizers1" class="hds-text-input__label">Valitse käytettävät tunnistimet:</label>
+                <label class="hds-text-input__label">Regex-tunnistimet:</label>
                 <div class="hds-text-input__input-wrapper">
-                    <select id="recognizers1" name="recognizers" multiple>
-                        {% for recognizer in recognizer_options %}
-                        <option value="{{ recognizer }}">{{ recognizer }}</option>
+                    <select id="regex_labels" name="labels" multiple>
+                        {% for label, display_name in regex_labels %}
+                        <option value="{{ label }}" selected>{{ display_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <span class="hds-text-input__helper-text">Oletuksena kaikki tunnistimet ovat valittu.</span>
+                <span class="hds-text-input__helper-text">Suomalaiset henkilötunnukset, puhelinnumerot, rekisterinumerot jne.</span>
+            </div>
+
+            <div class="hds-text-input">
+                <label for="gliner_threshold" class="hds-text-input__label">
+                    Tunnistuksen tarkkuus: <span id="threshold_value">{{ default_threshold }}</span>
+                </label>
+                <div class="hds-text-input__input-wrapper">
+                    <input type="range" id="gliner_threshold" name="gliner_threshold"
+                           min="0.0" max="1.0" step="0.1" value="{{ default_threshold }}"
+                           oninput="document.getElementById('threshold_value').textContent = this.value">
+                </div>
+                <span class="hds-text-input__helper-text">
+                    Korkeampi arvo = tarkempi tunnistus, vähemmän vääriä positiivisia
+                </span>
             </div>
 
              <button type="submit" class="hds-button hds-button--primary">
