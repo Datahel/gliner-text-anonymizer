@@ -40,14 +40,12 @@ class Anonymizer(AnonymizerInterface):
         and entity detection results are returned directly rather than stored in instance state.
     """
 
-    def __init__(self, languages: Optional[List[str]] = None,
-            recognizer_configuration: Optional[List[Dict[str, Any]]] = None,
-            model_name='urchade/gliner_multi-v2.1',
-            debug_mode=False,
+    def __init__(self,
+            model_name: str = 'urchade/gliner_multi-v2.1',
+            debug_mode: bool = False,
             **kwargs
     ):
-        self.model_name = model_name
-        self.debug_mode = debug_mode
+        super().__init__(model_name=model_name, debug_mode=debug_mode, **kwargs)
         self.model = self._load_or_download_model()
 
         # Default labels: NER labels + all implemented regex labels
@@ -70,7 +68,6 @@ class Anonymizer(AnonymizerInterface):
         # Load label mappings from config file
         self.label_mappings = self.config_cache.get_label_mappings()
 
-        super().__init__(languages, recognizer_configuration, **kwargs)
 
     def _load_or_download_model(self):
         """Load model from cache or download if not available"""
@@ -469,7 +466,7 @@ class Anonymizer(AnonymizerInterface):
 
     def anonymize_text(self, text: str, profile: str = 'default',
                       labels: Optional[List[str]] = None,
-                      gliner_threshold: float = 0.3) -> str:
+                      gliner_threshold: float = 0.5) -> str:
         """
         Anonymize text and return only the anonymized string.
 
@@ -536,3 +533,40 @@ class Anonymizer(AnonymizerInterface):
                 details[entity_type] = [entity_text]
 
         return AnonymizerResult(anonymized_text=anonymized_text, summary=summary, details=details)
+
+    def combine_statistics(self, statistics_list: List[Dict[str, int]]) -> Dict[str, int]:
+        """
+        Combine multiple statistics dictionaries into a single aggregated summary.
+
+        Args:
+            statistics_list: List of summary dicts from multiple anonymize() calls
+
+        Returns:
+            Combined dictionary with aggregated counts
+        """
+        combined = {}
+        for stats in statistics_list:
+            if stats:
+                for entity_type, count in stats.items():
+                    combined[entity_type] = combined.get(entity_type, 0) + count
+        return combined
+
+    def combine_details(self, details_list: List[Dict[str, List[str]]]) -> Dict[str, List[str]]:
+        """
+        Combine multiple details dictionaries into a single aggregated collection.
+
+        Args:
+            details_list: List of details dicts from multiple anonymize() calls
+
+        Returns:
+            Combined dictionary with aggregated entity text lists
+        """
+        combined = {}
+        for details in details_list:
+            if details:
+                for entity_type, entities in details.items():
+                    if entity_type not in combined:
+                        combined[entity_type] = []
+                    combined[entity_type].extend(entities)
+        return combined
+

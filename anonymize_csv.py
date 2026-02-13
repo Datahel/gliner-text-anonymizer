@@ -4,36 +4,41 @@ import sys
 import time
 
 from text_anonymizer import TextAnonymizer
-from text_anonymizer.default_settings import RECOGNIZER_CONFIGURATION_ALL
 
-parser = argparse.ArgumentParser(description='Anonymize csv file', epilog="Example: python anonymize_csv.py file_in.csv file_out.csv --column_name=text")
+parser = argparse.ArgumentParser(
+    description='Anonymize CSV file',
+    epilog="Example: python anonymize_csv.py file_in.csv file_out.csv --column_name=text"
+)
 parser.add_argument('source_file', type=str, help='CSV-file to be anonymized')
 parser.add_argument('target_file', type=str, help='Name or path of (anonymized) destination file.')
-
 parser.add_argument('--column_name', type=str, help='Name (header) of anonymized column. Default: first column')
 parser.add_argument('--column_index', type=str, help='Index(es) (starting from 0) of anonymized column(s). Default: 0 (first column). Select multiple columns by separating column indexes by comma.')
 parser.add_argument('--header', type=str, help='CSV file contains header. Default: True')
 parser.add_argument('--delimiter', type=str, help='CSV-file delimiter. Default: ;')
 parser.add_argument('--quotechar', type=str, help='CSV quote character: SINGLE, DOUBLE.  Default: none')
 parser.add_argument('--quotemode', type=str, help='CSV quoting mode: NONE, NON_NUMERIC, MINIMAL.  Default: NONE')
-parser.add_argument('--languages', type=str, help='Selected languages (comma separated). Default: fi,en')
 parser.add_argument('--encoding', type=str, help='Source encoding. Default: UTF-8')
 parser.add_argument('--debug', type=str, help='Toggle debug logging. Default: False')
-parser.add_argument('--recognizers', type=str, help=f'Override active recognizers. Available options: {", ".join(RECOGNIZER_CONFIGURATION_ALL)}')
+parser.add_argument('--threshold', type=float, help='GLiNER confidence threshold (0.0-1.0). Default: 0.6')
+parser.add_argument('--profile', type=str, help='Profile name for configuration. Default: default')
+parser.add_argument('--labels', type=str, help='Entity labels to detect (comma-separated). Default: use profile defaults')
 
+# ... existing code ...
 delimiter = ';'
 quotechar = ''
 csv_file = None
+target_file = None
 column_name = None
 column_names = []
 column_index = 0
 column_indexes = []
 header = True
-languages = ['fi']
 debug = False
+threshold = 0.6
+profile = 'default'
+labels = None
 start_time = time.time()
 source_encoding = 'UTF-8'
-recognizers=None
 
 try:
     args = parser.parse_args()
@@ -41,6 +46,7 @@ except:
     parser.print_help()
     sys.exit(0)
 
+# ... existing code ...
 if args.source_file:
     csv_file = args.source_file
 if args.target_file:
@@ -68,16 +74,18 @@ if args.quotechar:
         quotechar = None
 if args.delimiter:
     delimiter = args.delimiter
-if args.languages:
-    languages = args.languages.split(',')
 if args.encoding:
     source_encoding = args.encoding
 if args.debug and "true" == args.debug.lower():
     debug = True
-if args.recognizers:
-    recognizers = args.recognizers.split(',')
+if args.threshold:
+    threshold = args.threshold
+if args.profile:
+    profile = args.profile
+if args.labels:
+    labels = args.labels.split(',') if args.labels else None
 
-
+# Set up quoting mode
 quoting = csv.QUOTE_NONE
 if quotechar:
     quoting = csv.QUOTE_MINIMAL
@@ -93,8 +101,6 @@ if args.quotemode:
     else:
         quoting = csv.QUOTE_NONE
 
-
-
 print("Anonymizing file: {i}. ".format(i=csv_file))
 if debug:
     print("")
@@ -109,12 +115,17 @@ if debug:
     print("- File contains header: {s}".format(s=header))
     print("- CSV quote char: {s}".format(s=quotechar))
     print("- CSV quoting mode: {s}".format(s=quoting))
-    print("- Quoting mode: {s}".format(s=quoting))
     print("- CSV delimiter: {s}".format(s=delimiter))
     print("- Encoding: {s}".format(s=source_encoding))
+    print("- Profile: {s}".format(s=profile))
+    print("- Threshold: {s}".format(s=threshold))
+    if labels:
+        print("- Labels: {s}".format(s=labels))
     print("")
 
-text_anonymizer = TextAnonymizer(languages=languages, debug_mode=debug, recognizer_configuration=recognizers)
+text_anonymizer = TextAnonymizer(debug_mode=debug)
+
+
 statistics_list = []
 details_list = []
 
@@ -155,7 +166,12 @@ if csv_file:
                             if row and len(row) > i:
                                 text = row[i]
                                 if text:    # can be empty
-                                    anonymized = text_anonymizer.anonymize(text)
+                                    anonymized = text_anonymizer.anonymize(
+                                        text,
+                                        labels=labels,
+                                        profile=profile,
+                                        gliner_threshold=threshold
+                                    )
                                     if anonymized.summary:
                                         statistics_list.append(anonymized.summary)
                                     if anonymized.details:

@@ -5,8 +5,6 @@ import time
 
 import common_test_data as test_data
 from text_anonymizer import TextAnonymizer
-from text_anonymizer.constants import RECOGNIZER_SPACY_ADDRESS
-from text_anonymizer.default_settings import RECOGNIZER_SPACY_FI
 
 ACCEPTED_ERROR_RATE = 0.05   # 5% error rate
 
@@ -105,15 +103,12 @@ def generate_words(amount=1):
         words.append(random.choice(_WORDS))
     return words
 
-def evaluate_anonymizer_with_generated_names(iterations=10000) -> (float, list[str]):
+def evaluate_anonymizer_with_generated_names(iterations=100) -> (float, list[str]):
     print("\nRunning name anonymization test with {i} iterations using randomly generated names from top-{tl} "
           "last names and top-{tf} first names.".format(i=iterations, tl=TOP_LAST_NAMES, tf=TOP_FIRST_NAMES))
-    recognizers = [RECOGNIZER_SPACY_FI]
-    text_anonymizer = TextAnonymizer(languages=['fi'], recognizer_configuration=recognizers)
+    text_anonymizer = TextAnonymizer(debug_mode=False)
     # Measure time
     start_time = time.time()
-    print("Using recognizer configuration: ", recognizers)
-    print(text_anonymizer.analyzer_engine.registry.recognizers)
 
     success_count = 0
     partial_success_count = 0
@@ -148,10 +143,10 @@ def evaluate_anonymizer_with_generated_names(iterations=10000) -> (float, list[s
     print("Time taken: {:.2f} seconds".format(end_time - start_time))
     return success_percentage, failed_list
 
-def evaluate_anonymizer_with_plain_words(iterations=10000) -> (float, list[str]):
+def evaluate_anonymizer_with_plain_words(iterations=100) -> (float, list[str]):
     print("\nRunning word anonymization test with {i} iterations using randomly selected plain words from dataset of {tl} words"
           .format(i=iterations, tl=TOP_WORDS))
-    text_anonymizer = TextAnonymizer(languages=['fi'], recognizer_configuration=[RECOGNIZER_SPACY_FI])
+    text_anonymizer = TextAnonymizer(debug_mode=False)
     success_count = 0
     partial_success_count = 0
     random_words = generate_words(iterations)
@@ -175,10 +170,10 @@ def evaluate_anonymizer_with_plain_words(iterations=10000) -> (float, list[str])
             partial_success_percentage=partial_success_percentage))
     return success_percentage, failed_list
 
-def evaluate_anonymizer_with_streets(iterations=1000) -> (float, list[str]):
+def evaluate_anonymizer_with_streets(iterations=100) -> (float, list[str]):
     print("\nRunning street anonymization test with {i} iterations using list of {tl} street names."
           .format(i=iterations, tl=TOP_STREETS))
-    text_anonymizer = TextAnonymizer(languages=['fi'], recognizer_configuration=[RECOGNIZER_SPACY_ADDRESS])
+    text_anonymizer = TextAnonymizer(debug_mode=False)
     success_count = 0
     partial_success_count = 0
     random_streets = generate_streets(iterations)

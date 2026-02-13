@@ -33,7 +33,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Max upload size, here set
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Init anonymizer as singleton
-text_anonymizer = TextAnonymizer(languages=['fi', 'en'], debug_mode=False)
+text_anonymizer = TextAnonymizer(debug_mode=False)
 
 # Load label mappings from config first
 config_cache = ConfigCache.instance()
