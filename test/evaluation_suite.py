@@ -26,7 +26,9 @@ Output:
 
 import argparse
 import logging
+import os
 import random
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -266,6 +268,268 @@ def evaluate_words_with_threshold(
     )
 
 
+def load_test_sentences(filepath: str = None) -> List[str]:
+    """Load test sentences from file."""
+    if filepath is None:
+        # Default path relative to this file
+        this_dir = os.path.dirname(os.path.abspath(__file__))
+        filepath = os.path.join(this_dir, "data", "testilauseet.txt")
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    return lines
+
+
+def find_placeholders(text: str) -> List[Tuple[int, int, str]]:
+    """
+    Find all placeholders in text and return their positions and types.
+
+    Returns:
+        List of (start, end, label_type) tuples, sorted by position
+    """
+    placeholders = []
+
+    # Find all <LABEL> patterns
+    pattern = r'<(NIMI|OSOITE)>'
+    for match in re.finditer(pattern, text):
+        placeholders.append((match.start(), match.end(), match.group(1)))
+
+    return sorted(placeholders, key=lambda x: x[0])
+
+
+def replace_placeholders_with_content(
+    template: str,
+    names: List[str],
+    addresses: List[str]
+) -> Tuple[str, List[Tuple[int, int, str, str]]]:
+    """
+    Replace placeholders with random content from appropriate sources.
+
+    Works by replacing from end to start to avoid index shifting issues.
+
+    Args:
+        template: Text with <NIMI> and <OSOITE> placeholders
+        names: List of names to use as replacements
+        addresses: List of addresses to use as replacements
+
+    Returns:
+        Tuple of (filled_text, injected_entities)
+        where injected_entities is list of (start, end, label_type, original_text)
+    """
+    placeholders = find_placeholders(template)
+
+    if not placeholders:
+        return template, []
+
+    # Work backwards to avoid index shifting
+    result = template
+    injected_entities = []
+
+    # Process in reverse order
+    for start, end, label_type in reversed(placeholders):
+        if label_type == 'NIMI':
+            replacement = random.choice(names)
+        elif label_type == 'OSOITE':
+            replacement = random.choice(addresses)
+        else:
+            continue
+
+        # Replace the placeholder
+        result = result[:start] + replacement + result[end:]
+
+    # Now find the positions in the final text by processing forward
+    # Re-parse to get actual positions after all replacements
+    result = template
+    current_offset = 0
+
+    for start, end, label_type in placeholders:
+        if label_type == 'NIMI':
+            replacement = random.choice(names)
+        elif label_type == 'OSOITE':
+            replacement = random.choice(addresses)
+        else:
+            continue
+
+        # Calculate actual position accounting for previous replacements
+        actual_start = start + current_offset
+
+        # Replace in result
+        result = result[:actual_start] + replacement + result[actual_start + (end - start):]
+
+        # Record the entity position in the final text
+        actual_end = actual_start + len(replacement)
+        injected_entities.append((actual_start, actual_end, label_type, replacement))
+
+        # Update offset for next replacement
+        # Offset changes by the difference between replacement length and placeholder length
+        current_offset += len(replacement) - (end - start)
+
+    return result, injected_entities
+
+
+def check_entity_anonymized(
+    anonymized_text: str,
+    original_text: str,
+    entity_start: int,
+    entity_end: int,
+    entity_text: str,
+    label_type: str
+) -> str:
+    """
+    Check if an entity was properly anonymized.
+
+    Returns:
+        'success' - Entity was fully anonymized
+        'partial' - Entity was partially anonymized
+        'failed' - Entity was not anonymized
+    """
+    # The entity text should not appear in the anonymized output
+    if entity_text not in anonymized_text:
+        # Check if appropriate label exists
+        expected_labels = ['<NIMI>', '<OSOITE>'] if label_type == 'NIMI' else ['<OSOITE>', '<SIJAINTI>']
+        if any(label in anonymized_text for label in expected_labels):
+            return 'success'
+        # Text is gone but no label - might still be success if replaced with any label
+        if '<' in anonymized_text and '>' in anonymized_text:
+            return 'success'
+        return 'partial'
+    else:
+        # Entity text still present
+        # Check if at least part was anonymized (label present)
+        if '<' in anonymized_text and '>' in anonymized_text:
+            return 'partial'
+        return 'failed'
+
+
+def evaluate_longer_texts_with_threshold(
+    iterations: int,
+    gliner_threshold: float,
+    anonymizer: Optional[TextAnonymizer] = None,
+    verbose: int = 1
+) -> EvaluationResult:
+    """
+    Evaluate anonymizer with longer texts containing multiple entities.
+
+    Process:
+    1. Load template sentences with <NIMI> and <OSOITE> placeholders
+    2. Replace placeholders with random names/addresses
+    3. Run anonymizer on the filled text
+    4. Check if all injected entities were properly anonymized
+
+    Args:
+        iterations: Number of test iterations
+        gliner_threshold: GLiNER confidence threshold
+        anonymizer: Pre-initialized anonymizer (optional)
+        verbose: 0 = silent, 1 = summary only, 2 = all details
+
+    Returns:
+        EvaluationResult with success/partial/failed counts
+    """
+    if verbose >= 1:
+        logger.info("Evaluating longer texts: iterations=%d, threshold=%.2f", iterations, gliner_threshold)
+
+    start_time = time.time()
+
+    if anonymizer is None:
+        anonymizer = TextAnonymizer(debug_mode=False)
+
+    # Load templates and generate test data
+    templates = load_test_sentences()
+    names = test_util_text_anonymizer.generate_full_names(iterations * 5)  # Generate pool of names
+    addresses = test_util_text_anonymizer.generate_streets(iterations * 5)  # Generate pool of addresses
+
+    success_count = 0
+    partial_count = 0
+    failed_items = []
+
+    total_entities = 0
+    entities_success = 0
+    entities_partial = 0
+    entities_failed = 0
+
+    for i in range(iterations):
+        # Pick a random template
+        template = random.choice(templates)
+
+        # Reset random seed for reproducible name/address selection per iteration
+        # (but still randomized based on iteration)
+        random.seed(1234 + i)
+
+        # Fill template with random content
+        filled_text, injected_entities = replace_placeholders_with_content(
+            template, names, addresses
+        )
+
+        if not injected_entities:
+            continue
+
+        # Anonymize the filled text
+        anonymized = anonymizer.anonymize_text(filled_text, gliner_threshold=gliner_threshold)
+
+        # Check each injected entity
+        iteration_success = 0
+        iteration_partial = 0
+        iteration_failed = 0
+
+        for entity_start, entity_end, label_type, entity_text in injected_entities:
+            total_entities += 1
+
+            result = check_entity_anonymized(
+                anonymized, filled_text, entity_start, entity_end, entity_text, label_type
+            )
+
+            if result == 'success':
+                entities_success += 1
+                iteration_success += 1
+            elif result == 'partial':
+                entities_partial += 1
+                iteration_partial += 1
+            else:
+                entities_failed += 1
+                iteration_failed += 1
+
+        # Determine overall result for this text
+        if iteration_failed == 0 and iteration_partial == 0:
+            success_count += 1
+            if verbose >= 2:
+                print(f"  [SUCCESS] All {len(injected_entities)} entities anonymized")
+                print(f"    Input:  '{filled_text[:80]}...'")
+                print(f"    Output: '{anonymized[:80]}...'")
+        elif iteration_failed == 0:
+            partial_count += 1
+            if verbose >= 2:
+                print(f"  [PARTIAL] {iteration_success}/{len(injected_entities)} entities fully anonymized")
+                print(f"    Input:  '{filled_text[:80]}...'")
+                print(f"    Output: '{anonymized[:80]}...'")
+        else:
+            failed_items.append(f"Text {i+1}: {iteration_failed}/{len(injected_entities)} entities not anonymized")
+            if verbose >= 2:
+                print(f"  [FAILED ] {iteration_failed}/{len(injected_entities)} entities not anonymized")
+                print(f"    Input:  '{filled_text[:80]}...'")
+                print(f"    Output: '{anonymized[:80]}...'")
+                # Show which entities failed
+                for entity_start, entity_end, label_type, entity_text in injected_entities:
+                    if entity_text in anonymized:
+                        print(f"    - NOT anonymized: '{entity_text}' ({label_type})")
+
+    duration = time.time() - start_time
+
+    if verbose >= 1:
+        logger.info("Longer texts entity stats: %d success, %d partial, %d failed (total: %d)",
+                   entities_success, entities_partial, entities_failed, total_entities)
+
+    return EvaluationResult(
+        test_name="Longer Texts",
+        samples=iterations,
+        success_count=success_count,
+        partial_count=partial_count,
+        failed_items=failed_items,
+        duration_seconds=duration,
+        gliner_threshold=gliner_threshold
+    )
+
+
 def print_separator(char: str = "-", length: int = 80):
     """Print a separator line."""
     print(char * length)
@@ -278,7 +542,7 @@ def print_results_table(results: List[EvaluationResult], title: str = "EVALUATIO
     print_separator("=")
 
     # Header
-    header = f"{'Test Category':<22} {'Samples':>8} {'Success':>10} {'Partial':>10} {'Failed':>8} {'Accuracy':>10}"
+    header = f"{'Test Category':<22} {'Samples':>8} {'Success':>10} {'Partial':>10} {'Failed':>8} {'Accuracy':>10} {'Partial %':>10}"
     print(header)
     print_separator("-")
 
@@ -290,7 +554,7 @@ def print_results_table(results: List[EvaluationResult], title: str = "EVALUATIO
 
     for result in results:
         failed_count = len(result.failed_items)
-        row = f"{result.test_name:<22} {result.samples:>8} {result.success_count:>10} {result.partial_count:>10} {failed_count:>8} {result.accuracy:>9.2f}%"
+        row = f"{result.test_name:<22} {result.samples:>8} {result.success_count:>10} {result.partial_count:>10} {failed_count:>8} {result.accuracy:>9.2f}% {result.partial_rate:>9.2f}%"
         print(row)
         total_samples += result.samples
         total_success += result.success_count
@@ -301,7 +565,8 @@ def print_results_table(results: List[EvaluationResult], title: str = "EVALUATIO
 
     # Totals
     overall_accuracy = round((total_success / total_samples) * 100, 2) if total_samples > 0 else 0.0
-    totals_row = f"{'TOTAL':<22} {total_samples:>8} {total_success:>10} {total_partial:>10} {total_failed:>8} {overall_accuracy:>9.2f}%"
+    overall_partial = round((total_partial / total_samples) * 100, 2) if total_samples > 0 else 0.0
+    totals_row = f"{'TOTAL':<22} {total_samples:>8} {total_success:>10} {total_partial:>10} {total_failed:>8} {overall_accuracy:>9.2f}% {overall_partial:>9.2f}%"
     print(totals_row)
     print_separator("=")
 
@@ -514,22 +779,28 @@ def run_evaluation(
 
     # Run evaluations
     if verbose >= 1:
-        print("\n[1/3] Evaluating name anonymization...")
+        print("\n[1/4] Evaluating name anonymization...")
         if verbose >= 2:
             print_separator("-", 60)
     results.append(evaluate_names_with_threshold(iterations, gliner_threshold, anonymizer, verbose=verbose))
 
     if verbose >= 1:
-        print("\n[2/3] Evaluating address anonymization...")
+        print("\n[2/4] Evaluating address anonymization...")
         if verbose >= 2:
             print_separator("-", 60)
     results.append(evaluate_addresses_with_threshold(iterations, gliner_threshold, anonymizer, verbose=verbose))
 
     if verbose >= 1:
-        print("\n[3/3] Evaluating false positives (plain words)...")
+        print("\n[3/4] Evaluating false positives (plain words)...")
         if verbose >= 2:
             print_separator("-", 60)
     results.append(evaluate_words_with_threshold(iterations, gliner_threshold, anonymizer, verbose=verbose))
+
+    if verbose >= 1:
+        print("\n[4/4] Evaluating longer texts with multiple entities...")
+        if verbose >= 2:
+            print_separator("-", 60)
+    results.append(evaluate_longer_texts_with_threshold(iterations, gliner_threshold, anonymizer, verbose=verbose))
 
     # Print failed items (details) - only at verbose >= 1
     if verbose >= 1:

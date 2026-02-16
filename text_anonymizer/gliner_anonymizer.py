@@ -43,18 +43,34 @@ class Anonymizer(AnonymizerInterface):
     def __init__(self,
             model_name: str = 'urchade/gliner_multi-v2.1',
             debug_mode: bool = False,
+            address_score_boost: float = 0.15,
             **kwargs
     ):
+        """
+        Initialize the GLiNER-based anonymizer.
+
+        Args:
+            model_name: GLiNER model to use
+            debug_mode: Enable debug output
+            address_score_boost: Score boost for address entities when they overlap with
+                               person entities. Finnish streets often contain person names
+                               (e.g., "Antti Mäen kuja"), this boost helps addresses win
+                               the overlap resolution. Set to 0 to disable. Default: 0.15
+        """
         super().__init__(model_name=model_name, debug_mode=debug_mode, **kwargs)
         self.model = self._load_or_download_model()
+
+        # Score boost for addresses competing with person names
+        # See docs/ADDRESS_DETECTION_FIX.md for rationale
+        self.address_score_boost = address_score_boost
 
         # Default labels: NER labels + all implemented regex labels
         self.labels = [
             # NER labels (GLiNER)
-            "person_ner",
+            "address_ner",
             "phone_number_ner",
             "email_ner",
-            "address_ner",
+            "person_ner",
             # Regex labels (all implemented Finnish patterns)
             "fi_hetu_regex",
             "fi_puhelin_regex",
@@ -151,6 +167,14 @@ class Anonymizer(AnonymizerInterface):
         Automatically chunks long texts to avoid GLiNER's 384 token limit.
         Entities from overlapping regions are deduplicated.
 
+        Uses two-pass detection for addresses to avoid label interference:
+        - Pass 1: Detect addresses separately (with lower threshold)
+        - Pass 2: Detect other entities together
+
+        Note: GLiNER uses positional encoding for labels, so label order affects
+        detection confidence scores (see: https://github.com/urchade/GLiNER/issues/192).
+        Running address detection separately avoids this interference.
+
         Args:
             text: Text to analyze
             threshold: Confidence threshold (0.0-1.0)
@@ -161,6 +185,51 @@ class Anonymizer(AnonymizerInterface):
         # Split text into chunks if needed
         chunks = self._split_text_into_chunks(text)
 
+        # Check if we need two-pass detection (address + other labels)
+        has_address = 'address' in [l.lower() for l in labels]
+        other_labels = [l for l in labels if l.lower() != 'address']
+
+        # Two-pass detection to avoid GLiNER label interference
+        # GLiNER uses positional encoding, so label order affects scores.
+        # Address detection is more reliable when run separately.
+        # See: https://github.com/urchade/GLiNER/issues/192
+        if has_address and other_labels:
+            if self.debug_mode:
+                print(f"[GLINER] Using two-pass detection: address + {other_labels}")
+
+            # Pass 1: Address detection with slightly lower threshold
+            address_threshold = max(0.3, threshold - 0.1)  # Lower threshold for addresses
+            address_entities = self._gliner_predict_chunks(text, chunks, ['address'], address_threshold)
+
+            # Pass 2: Other entities with normal threshold
+            # Put 'person' first as it's typically highest priority for detection
+            other_entities = self._gliner_predict_chunks(text, chunks, other_labels, threshold)
+
+            # Combine results
+            all_entities = address_entities + other_entities
+
+            if self.debug_mode:
+                print(f"[GLINER] Two-pass results: {len(address_entities)} addresses, {len(other_entities)} others")
+
+            return all_entities
+
+        # Single-pass detection (either only address or no address label)
+        return self._gliner_predict_chunks(text, chunks, labels, threshold)
+
+    def _gliner_predict_chunks(self, text: str, chunks: List[tuple],
+                                labels: List[str], threshold: float) -> List[Dict]:
+        """
+        Run GLiNER prediction across text chunks with deduplication.
+
+        Args:
+            text: Original full text
+            chunks: List of (chunk_text, offset) tuples
+            labels: Labels to detect
+            threshold: Confidence threshold
+
+        Returns:
+            List of detected entities with adjusted positions
+        """
         if len(chunks) == 1:
             # No chunking needed, process directly
             return self.model.predict_entities(text, labels, threshold=threshold)
@@ -267,12 +336,41 @@ class Anonymizer(AnonymizerInterface):
         """
         Remove overlapping entities, prioritizing regex/blocklist matches over GLiNER.
         Priority order: 1) score=1.0 (regex/blocklist), 2) longest span, 3) highest score
+
+        Special handling: Address entities get a score boost when competing with person
+        entities, since street names often contain person names (e.g., "Antti Mäen kuja").
         """
         if not entities:
             return []
 
+        # Apply score boost for address entities that overlap with person entities
+        # This helps addresses win when street names contain person names
+        # (e.g., "Antti Mäen kuja" - GLiNER might detect "Antti Mäen" as person)
+
+        boosted_entities = []
+        for entity in entities:
+            boosted_entity = entity.copy()
+
+            # Check if this is an address entity and boost is enabled
+            if self.address_score_boost > 0 and entity.get('label', '').lower() == 'address':
+                # Check if there's an overlapping person entity
+                has_overlapping_person = any(
+                    other.get('label', '').lower() == 'person' and
+                    not (other['end'] <= entity['start'] or other['start'] >= entity['end'])
+                    for other in entities if other is not entity
+                )
+
+                if has_overlapping_person:
+                    # Boost the address score
+                    original_score = entity.get('score', 0.5)
+                    boosted_entity['score'] = min(1.0, original_score + self.address_score_boost)
+                    if self.debug_mode:
+                        print(f"[BOOST] Address '{entity.get('text')}' score: {original_score:.3f} -> {boosted_entity['score']:.3f} (boost: +{self.address_score_boost})")
+
+            boosted_entities.append(boosted_entity)
+
         # Sort by start position, then prioritize score=1.0 (regex/blocklist), then length
-        entities.sort(key=lambda x: (
+        boosted_entities.sort(key=lambda x: (
             x['start'],  # Same start position
             0 if x.get('score', 0) == 1.0 else 1,  # Prioritize regex/blocklist (score=1.0)
             -(x['end'] - x['start']),  # Then longest span
@@ -282,7 +380,7 @@ class Anonymizer(AnonymizerInterface):
         non_overlapping = []
         last_end = -1
 
-        for entity in entities:
+        for entity in boosted_entities:
             if entity['start'] >= last_end:
                 non_overlapping.append(entity)
                 last_end = entity['end']
