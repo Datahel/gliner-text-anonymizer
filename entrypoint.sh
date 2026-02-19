@@ -9,6 +9,17 @@ export ONNXRUNTIME_DISABLE_CPUID_CHECK=1
 export TOKENIZERS_PARALLELISM=false
 export TRANSFORMERS_VERBOSITY=error
 
+# Suppress HuggingFace Hub unauthenticated warning
+export HF_HUB_DISABLE_TELEMETRY=1
+export HF_HUB_OFFLINE=0
+
+
+# Generate SECRET_KEY if not set (for consistency across workers)
+if [ -z "$SECRET_KEY" ]; then
+    export SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+fi
+
+
 # Helper: ensure a command exists, else fail fast with a clear message
 require_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then

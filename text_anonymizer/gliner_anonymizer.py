@@ -4,7 +4,7 @@ Lightweight GLiNER-based text anonymizer with profile support.
 import sys
 import re
 import time
-from typing import Optional, List, Dict, Any, Set
+from typing import Optional, List, Dict, Set
 
 try:
     from gliner import GLiNER
@@ -387,6 +387,34 @@ class Anonymizer(AnonymizerInterface):
 
         return non_overlapping
 
+    def _merge_consecutive_labels(self, text: str) -> str:
+        """
+        Merge consecutive identical labels in anonymized text.
+
+        Example: "<OSOITE> <OSOITE>" -> "<OSOITE>"
+                 "<NIMI> <OSOITE> <OSOITE> <NIMI>" -> "<NIMI> <OSOITE> <NIMI>"
+
+        Args:
+            text: Anonymized text with labels
+
+        Returns:
+            Text with consecutive identical labels merged
+        """
+        import re
+
+        # Pattern to match: <LABEL> followed by one or more spaces and the same <LABEL>
+        # Captures: (<LABEL>)(\s+)(<LABEL>)
+        # We need to repeat this until no more matches (handle sequences of 3+ labels)
+        pattern = r'<([A-ZÄÖÅÉ_]+)>(\s+)<\1>'
+
+        # Keep replacing until no more consecutive duplicates found
+        previous = None
+        while previous != text:
+            previous = text
+            text = re.sub(pattern, r'<\1>', text)
+
+        return text
+
     def _map_entity_label(self, label: str) -> str:
         """
         Map entity labels to output labels using config/label_mappings.txt.
@@ -550,6 +578,10 @@ class Anonymizer(AnonymizerInterface):
             start, end = entity['start'], entity['end']
             label = self._map_entity_label(entity['label'])
             result = result[:start] + f"<{label}>" + result[end:]
+
+        # Merge consecutive identical labels (e.g., "<OSOITE> <OSOITE>" -> "<OSOITE>")
+        result = self._merge_consecutive_labels(result)
+
         if self.debug_mode:
             elapsed = time.perf_counter() - t0
             print(f"[TIMING] Entity replacement: {elapsed:.3f}s")

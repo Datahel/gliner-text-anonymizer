@@ -44,9 +44,6 @@ COPY ./*.py /app/
 COPY ./entrypoint.sh /app/
 COPY ./flask/ /app/flask
 
-# Install the package in editable mode after deps are installed
-RUN python -m pip install -e /app/
-
 
 # Determine container mode in entrypoint
 ENTRYPOINT ["/bin/bash", "./entrypoint.sh"]
