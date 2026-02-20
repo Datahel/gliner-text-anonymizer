@@ -33,7 +33,7 @@ except ImportError:
     logger.error("requests is required for API tests. Install with: pip install requests")
     requests = None
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = "http://127.0.0.1:8001"
 API_TIMEOUT = 2.0
 
 

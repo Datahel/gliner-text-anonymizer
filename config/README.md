@@ -151,9 +151,13 @@ The default profile includes the following regex patterns:
 
 **FI_PUHELIN**
 
-1. `\b\+?358\s?[0-9]{1,2}\s?[0-9]{3,4}\s?[0-9]{3,4}\b`
-2. `\b0[0-9]{1,2}[\s-]?[0-9]{2,7}\b`
-3. `\b\(?0[0-9]{1,2}\)?[\s-]?[0-9]{5,7}\b`
+ `\+358\s?\(0\)\s?[0-9]{1,2}\s?[0-9]{3,4}\s?[0-9]{3,4}` - International with (0)
+2. `\+358\s[0-9]{1,2}\s[0-9]{3,4}\s?[0-9]{3,4}` - International with space
+3. `\+358\s?[0-9]{1,2}\s?[0-9]{6,8}` - International compact
+4. `\b0[1-9][0-9]?[\s-][0-9]{4,9}\b` - Local with single separator
+5. `\b0[1-9][0-9]{0,2}\s[0-9]{3,4}\s[0-9]{3,4}\b` - Local with multiple spaces
+6. `\b0[1-9][0-9]{7,9}\b` - Local without separator
+7. `\(0[1-9][0-9]?\)\s?[0-9]{5,8}` - Organization with parentheses
 
 **FI_REKISTERI**
 
@@ -224,6 +228,7 @@ Available regex patterns in default profile:
 | --- | --- |
 | email_regex | EMAIL |
 | fi_hetu_regex | FI_HETU |
+| fi_iban_regex | FI_IBAN |
 | fi_kiinteisto_regex | FI_KIINTEISTO |
 | fi_puhelin_regex | FI_PUHELIN |
 | fi_rekisteri_regex | FI_REKISTERI |

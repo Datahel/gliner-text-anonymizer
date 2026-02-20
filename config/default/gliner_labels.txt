@@ -4,7 +4,4 @@
 
 # Core NER entities
 person
-phone number
-email
 address
-

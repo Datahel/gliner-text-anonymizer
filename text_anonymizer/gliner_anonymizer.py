@@ -6,6 +6,7 @@ import re
 import time
 from typing import Optional, List, Dict, Set
 
+
 try:
     from gliner import GLiNER
 except ImportError:
@@ -16,6 +17,8 @@ except ImportError:
 from .anonymizer_interface import Anonymizer as AnonymizerInterface
 from .anonymizer_result import AnonymizerResult
 from .config_cache import ConfigCache
+
+
 
 '''
 Full List of Gliner supported PII Labels:
@@ -33,6 +36,8 @@ train ticket number, passport expiration date, and social_security_number.
 '''
 
 class Anonymizer(AnonymizerInterface):
+    DEFAULT_THRESHOLD = 0.5
+
     """Lightweight GLiNER-based anonymizer with text file configuration support.
 
     Thread Safety:
@@ -44,6 +49,7 @@ class Anonymizer(AnonymizerInterface):
             model_name: str = 'urchade/gliner_multi-v2.1',
             debug_mode: bool = False,
             address_score_boost: float = 0.15,
+            two_pass_detection: bool = True,
             **kwargs
     ):
         """
@@ -56,6 +62,10 @@ class Anonymizer(AnonymizerInterface):
                                person entities. Finnish streets often contain person names
                                (e.g., "Antti Mäen kuja"), this boost helps addresses win
                                the overlap resolution. Set to 0 to disable. Default: 0.15
+            two_pass_detection: Run address detection separately from other entities to
+                               avoid GLiNER label interference. Improves address accuracy
+                               but adds ~40-50ms latency. Set to False for lower latency.
+                               Default: True (prioritize accuracy)
         """
         super().__init__(model_name=model_name, debug_mode=debug_mode, **kwargs)
         self.model = self._load_or_download_model()
@@ -64,20 +74,25 @@ class Anonymizer(AnonymizerInterface):
         # See docs/ADDRESS_DETECTION_FIX.md for rationale
         self.address_score_boost = address_score_boost
 
+        # Two-pass detection for improved address accuracy
+        # See docs/LATENCY_ANALYSIS_REPORT.md for performance implications
+        self.two_pass_detection = two_pass_detection
+
         # Default labels: NER labels + all implemented regex labels
         self.labels = [
             # NER labels (GLiNER)
             "address_ner",
-            "phone_number_ner",
-            "email_ner",
             "person_ner",
+
             # Regex labels (all implemented Finnish patterns)
             "fi_hetu_regex",
             "fi_puhelin_regex",
             "fi_rekisteri_regex",
             "fi_kiinteisto_regex",
-            "iban_regex",
-            "tiedosto_regex"
+            "fi_iban_regex",
+            "ip_address_regex",
+            "file_regex",
+            "email_regex"
         ]
         self.config_cache = ConfigCache()
 
@@ -193,7 +208,8 @@ class Anonymizer(AnonymizerInterface):
         # GLiNER uses positional encoding, so label order affects scores.
         # Address detection is more reliable when run separately.
         # See: https://github.com/urchade/GLiNER/issues/192
-        if has_address and other_labels:
+        # Can be disabled via two_pass_detection=False for lower latency
+        if self.two_pass_detection and has_address and other_labels:
             if self.debug_mode:
                 print(f"[GLINER] Using two-pass detection: address + {other_labels}")
 
@@ -596,7 +612,7 @@ class Anonymizer(AnonymizerInterface):
 
     def anonymize_text(self, text: str, profile: str = 'default',
                       labels: Optional[List[str]] = None,
-                      gliner_threshold: float = 0.5) -> str:
+                      gliner_threshold: float = DEFAULT_THRESHOLD) -> str:
         """
         Anonymize text and return only the anonymized string.
 
@@ -620,7 +636,7 @@ class Anonymizer(AnonymizerInterface):
     def anonymize(self, text: str,
                   labels: Optional[List[str]] = None,
                   profile: str = 'default',
-                  gliner_threshold: float = 0.6) -> AnonymizerResult:
+                  gliner_threshold: float = DEFAULT_THRESHOLD) -> AnonymizerResult:
         """
         Anonymize text and return detailed results including summary statistics.
 

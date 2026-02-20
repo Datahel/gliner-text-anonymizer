@@ -14,7 +14,14 @@ logger = logging.getLogger(__name__)
 
 anonymizer_api = FastAPI()
 debug = False
-text_anonymizer = TextAnonymizer(debug_mode=debug)
+
+# Performance tuning via environment variables
+# TWO_PASS_DETECTION: Run address detection separately for better accuracy (default: true)
+# Set to "false" for ~40-50ms lower latency per request at cost of address accuracy
+TWO_PASS_DETECTION = os.getenv("TWO_PASS_DETECTION", "true").lower() == "true"
+
+text_anonymizer = TextAnonymizer(debug_mode=debug, two_pass_detection=TWO_PASS_DETECTION)
+logger.info(f"TextAnonymizer initialized (two_pass_detection={TWO_PASS_DETECTION})")
 
 # Enable/disable watcher via env var CONFIG_WATCHER_ENABLED (default: true)
 WATCHER_ENABLED = os.getenv("CONFIG_WATCHER_ENABLED", "true").lower() == "true"
@@ -25,7 +32,7 @@ def on_config_change():
     """Callback triggered when config files change."""
     global text_anonymizer
     logger.info("Config change detected, recreating anonymizer")
-    text_anonymizer = TextAnonymizer(debug_mode=debug)
+    text_anonymizer = TextAnonymizer(debug_mode=debug, two_pass_detection=TWO_PASS_DETECTION)
 
 
 config_watcher = ConfigWatcher(CONFIG_DIR, enabled=WATCHER_ENABLED, on_change_callback=on_config_change)
